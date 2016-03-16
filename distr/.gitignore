@@ -1,0 +1,10 @@
+# vim
+*.swp
+
+# Mac OS X
+*.DS_Store
+
+# objects
+client
+server
+*.o
