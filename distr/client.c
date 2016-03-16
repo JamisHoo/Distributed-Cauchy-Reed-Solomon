@@ -44,7 +44,7 @@ size_t size;
 uint8_t* data;
 
 void data_init() {
-    data = (uint8_t*)malloc(DATA_SIZE / NUM_CLIENTS);
+    data = (uint8_t*)malloc(BUFFER_SIZE);
 }
 
 void data_release() {
@@ -99,7 +99,7 @@ void network_init() {
     err = ibv_req_notify_cq(cq, 0);
     assert(err == 0);
 
-    mr_data = ibv_reg_mr(pd, data, DATA_SIZE / NUM_CLIENTS, 
+    mr_data = ibv_reg_mr(pd, data, BUFFER_SIZE, 
                          IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
     assert(mr_data);
 
@@ -117,7 +117,7 @@ void network_init() {
     /* Post receive for data before connecting */
 
     sge_data.addr = (uintptr_t)data;
-    sge_data.length = DATA_SIZE / NUM_CLIENTS;
+    sge_data.length = BUFFER_SIZE;
     sge_data.lkey = mr_data->lkey;
 
     recv_wr.sg_list = &sge_data;
@@ -162,9 +162,61 @@ void network_release() {
     rdma_destroy_event_channel(cm_channel);
 }
 
+void post_receive() {
+    /* Post receive for data */
+    sge_data.addr = (uintptr_t)data;
+    sge_data.length = BUFFER_SIZE;
+    sge_data.lkey = mr_data->lkey;
+
+    recv_wr.sg_list = &sge_data;
+    recv_wr.num_sge = 1;
+
+    err = ibv_post_recv(cm_id->qp, &recv_wr, &bad_recv_wr);
+    assert(err == 0);
+}
+
+int wait_receive() {
+    /* Wait for receive completion */
+    err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context);
+    if (err) return 1;
+
+    ibv_ack_cq_events(evt_cq, 1);
+
+    err = ibv_req_notify_cq(cq, 0);
+    if (err) return 1;
+
+    n = ibv_poll_cq(cq, 1, &wc);
+    if (n < 0) return 1;
+    if (wc.status != IBV_WC_SUCCESS) return 1;
+    
+    return 0;
+}
+
+void handle_data() {
+    FILE* pfile;
+    char filename[128];
+    size_t size;
+
+    sprintf(filename, "data%d", client_pdata.index);
+    pfile = fopen(filename, "wb");
+    size = fwrite(data, BUFFER_SIZE, 1, pfile); 
+    assert(size == 1);
+    fclose(pfile);
+}
+
 int main(int argc, char** argv) {
     data_init();
     network_init();
+
+    while (1) {
+        post_receive();
+
+        wait_receive();
+
+        handle_data();
+
+        break;
+    }
 
     network_release();
     data_release();

@@ -35,7 +35,10 @@ int i, n, err;
 uint8_t* data;
 
 void data_init() {
-    data = (uint8_t*)malloc(DATA_SIZE);
+    data = (uint8_t*)malloc(BUFFER_SIZE * NUM_CLIENTS);
+    
+    for (i = 0; i < BUFFER_SIZE * NUM_CLIENTS; ++i)
+        data[i] = i + 53;
 }
 
 void data_release() {
@@ -87,8 +90,8 @@ void network_init() {
         err = ibv_req_notify_cq(cq[i], 0);
         assert(err == 0);
 
-        mr_data[i] = ibv_reg_mr(pd[i], data + DATA_SIZE / NUM_CLIENTS * i, 
-                                DATA_SIZE / NUM_CLIENTS, 
+        mr_data[i] = ibv_reg_mr(pd[i], data + BUFFER_SIZE * i, 
+                                BUFFER_SIZE, 
                                 IBV_ACCESS_LOCAL_WRITE); 
         assert(mr_data[i]);
 
@@ -137,9 +140,51 @@ void network_release() {
     rdma_destroy_event_channel(cm_channel);
 }
 
+void post_send(int i, uint8_t* buffer, size_t length) {
+    /* Send data to Client i */
+    sge_send[i].addr = (uintptr_t)buffer;
+    sge_send[i].length = length;
+    sge_send[i].lkey = mr_data[i]->lkey;
+
+    send_wr[i].wr_id = 1;
+    send_wr[i].opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
+    send_wr[i].send_flags = IBV_SEND_SIGNALED;
+    send_wr[i].sg_list = &sge_send[i];
+    send_wr[i].num_sge = 1;
+    send_wr[i].wr.rdma.rkey = ntohl(client_pdata[i].data_rkey);
+    send_wr[i].wr.rdma.remote_addr = ntohll(client_pdata[i].data_va);
+
+    err = ibv_post_send(cm_id[i]->qp, &send_wr[i], &bad_send_wr[i]);
+    assert(err == 0);
+
+    /* Wait for send completion */
+    err = ibv_get_cq_event(comp_chan[i], &evt_cq[i], &cq_context); 
+    assert(err == 0);
+
+    ibv_ack_cq_events(evt_cq[i], 1);
+
+    err = ibv_req_notify_cq(cq[i], 0);
+    assert(err == 0);
+
+    n = ibv_poll_cq(cq[i], 1, &wc);
+    assert(n >= 1);
+    assert(wc.status == IBV_WC_SUCCESS);
+}
+
+
 int main(int argc, char** argv) {
     data_init();
     network_init();
+
+    while (1) {
+        printf("Press to start");
+        getchar();
+
+        post_send(0, data, BUFFER_SIZE);
+        post_send(1, data + BUFFER_SIZE, BUFFER_SIZE);
+        
+        break;
+    }
     
     network_release();
     data_release();
