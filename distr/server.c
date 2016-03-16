@@ -29,9 +29,18 @@ struct ibv_send_wr* bad_send_wr[NUM_CLIENTS];
 struct ibv_wc wc;
 
 void* cq_context;
-struct sockaddr_in sin;
+struct sockaddr_in sockin;
 int i, n, err;
 
+uint8_t* data;
+
+void data_init() {
+    data = (uint8_t*)malloc(DATA_SIZE);
+}
+
+void data_release() {
+    free(data);
+}
 
 void network_init() {
     /* Set up RDMA CM structures */
@@ -42,14 +51,14 @@ void network_init() {
     err = rdma_create_id(cm_channel, &listen_id, 0, RDMA_PS_TCP);
     assert(err == 0);
 
-    memset(&sin, 0x00, sizeof(sin));
-    sin.sin_family = AF_INET;
-    sin.sin_port = htons(server_port); 
-    sin.sin_addr.s_addr = INADDR_ANY;
+    memset(&sockin, 0x00, sizeof(sockin));
+    sockin.sin_family = AF_INET;
+    sockin.sin_port = htons(server_port); 
+    sockin.sin_addr.s_addr = INADDR_ANY;
 
     /* Bind to local port and listen for connection request */
 
-    err = rdma_bind_addr(listen_id, (struct sockaddr*)&sin);
+    err = rdma_bind_addr(listen_id, (struct sockaddr*)&sockin);
     assert(err == 0);
 
     err = rdma_listen(listen_id, NUM_CLIENTS);
@@ -103,6 +112,7 @@ void network_init() {
         conn_param[i].private_data_len = sizeof(server_pdata[i]);
     }
 
+
     for (i = 0; i < NUM_CLIENTS; ++i) {
         /* Accept connection */
 
@@ -128,7 +138,9 @@ void network_release() {
 }
 
 int main(int argc, char** argv) {
+    data_init();
     network_init();
     
-    network_destroy();
+    network_release();
+    data_release();
 }
