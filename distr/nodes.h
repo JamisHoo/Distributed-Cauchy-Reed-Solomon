@@ -8,7 +8,7 @@ const char server_port_string[] = "5000";
 const char server_ip[] = "192.168.50.1";
 
 #define RESOLVE_TIMEOUT_MS (5000)
-#define DATA_SIZE (1 << 27)
+#define BUFFER_SIZE ((1 << 27) + 1024)
 #define COLUMN (4)
 #define ROW (COLUMN / 4 * 5)
 
