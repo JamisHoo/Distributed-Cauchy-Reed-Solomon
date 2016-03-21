@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -16,7 +17,6 @@ struct rdma_private_data server_pdata;
 struct rdma_private_data client_pdata;
 
 struct rdma_event_channel* cm_channel;
-struct rdma_event_channel* brick_cm_channel[NUM_BRICKS];
 struct rdma_cm_id* cm_id;
 struct rdma_cm_event* event;
 struct rdma_conn_param conn_param = { };
@@ -25,11 +25,14 @@ struct ibv_comp_channel* comp_chan;
 struct ibv_cq* cq;
 struct ibv_cq* evt_cq;
 struct ibv_mr* mr_data;
-struct ibv_mr* mr_output[NUM_BRICKS];
+struct ibv_mr* mr_ack_buffer;
 struct ibv_qp_init_attr qp_attr = { };
 struct ibv_sge sge_data;
+struct ibv_sge sge_send;
 struct ibv_recv_wr recv_wr = { };
+struct ibv_send_wr send_wr = { };
 struct ibv_recv_wr* bad_recv_wr;
+struct ibv_send_wr* bad_send_wr;
 struct ibv_wc wc;
 void* cq_context;
 
@@ -42,6 +45,7 @@ int n, i, err;
 size_t size;
 
 uint8_t* data;
+uint64_t ack_buffer;
 
 void data_init() {
     data = (uint8_t*)malloc(BUFFER_SIZE);
@@ -103,6 +107,10 @@ void network_init() {
                          IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE);
     assert(mr_data);
 
+    mr_ack_buffer = ibv_reg_mr(pd, &ack_buffer, sizeof(ack_buffer),
+                               IBV_ACCESS_LOCAL_WRITE);
+    assert(mr_ack_buffer);
+
     qp_attr.cap.max_send_wr = 10;
     qp_attr.cap.max_send_sge = 10;
     qp_attr.cap.max_recv_wr = 10;
@@ -153,6 +161,8 @@ void network_init() {
     /* Construct connection params */
 
     client_pdata.index = server_pdata.index;
+    client_pdata.ack_buffer_va = server_pdata.ack_buffer_va;
+    client_pdata.ack_buffer_rkey = server_pdata.ack_buffer_rkey;
 }
 
 void network_release() {
@@ -162,7 +172,7 @@ void network_release() {
     rdma_destroy_event_channel(cm_channel);
 }
 
-void post_receive() {
+void post_receive_data() {
     /* Post receive for data */
     sge_data.addr = (uintptr_t)data;
     sge_data.length = BUFFER_SIZE;
@@ -175,7 +185,7 @@ void post_receive() {
     assert(err == 0);
 }
 
-int wait_receive() {
+int wait_receive_data() {
     /* Wait for receive completion */
     err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context);
     if (err) return 1;
@@ -186,20 +196,56 @@ int wait_receive() {
     if (err) return 1;
 
     n = ibv_poll_cq(cq, 1, &wc);
-    if (n < 0) return 1;
+    if (n <= 0) return 1;
     if (wc.status != IBV_WC_SUCCESS) return 1;
     
     return 0;
 }
 
+void send_ack() {
+    /* Send ack */
+    ack_buffer = client_pdata.index;
+    sge_send.addr = (uintptr_t)&ack_buffer;
+    sge_send.length = sizeof(ack_buffer);
+    sge_send.lkey = mr_ack_buffer->lkey;
+
+    send_wr.wr_id = 1;
+    send_wr.opcode = IBV_WR_SEND;
+    send_wr.send_flags = IBV_SEND_SIGNALED;
+    send_wr.sg_list = &sge_send;
+    send_wr.num_sge = 1;
+
+    err = ibv_post_send(cm_id->qp, &send_wr, &bad_send_wr);
+    assert(err == 0);
+
+    /* Wait send completion */
+    err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context);
+    assert(err == 0);
+
+    ibv_ack_cq_events(evt_cq, 1);
+
+    err = ibv_req_notify_cq(cq, 0);
+    assert(err == 0);
+    
+    n = ibv_poll_cq(cq, 1, &wc);
+    assert(n >= 1); 
+    assert(wc.status == IBV_WC_SUCCESS);
+}
+
 void handle_data() {
     FILE* pfile;
-    char filename[128];
-    size_t size;
+    char filename[PATH_MAX];
+    size_t size, data_offset, data_size;
 
-    sprintf(filename, "data%d", client_pdata.index);
+    data_size = ntohll(*(uint64_t*)(data));
+    data_offset = ntohll(*(uint64_t*)(data + sizeof(uint64_t)));
+
+    printf("client %d: data offset %lu, data size %lu \n", 
+           client_pdata.index, data_offset, data_size);
+
+    sprintf(filename, "%s", data + 2 * sizeof(uint64_t));
     pfile = fopen(filename, "wb");
-    size = fwrite(data, BUFFER_SIZE, 1, pfile); 
+    size = fwrite(data + BUFFER_HEADER_SIZE, data_size, 1, pfile);
     assert(size == 1);
     fclose(pfile);
 }
@@ -209,11 +255,11 @@ int main(int argc, char** argv) {
     network_init();
 
     while (1) {
-        post_receive();
-
-        wait_receive();
-
+        post_receive_data();
+        wait_receive_data();
         handle_data();
+
+        send_ack();
 
         break;
     }
