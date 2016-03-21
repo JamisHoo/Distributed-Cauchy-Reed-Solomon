@@ -19,9 +19,9 @@ struct rdma_cm_id* cm_id[NUM_CLIENTS];
 struct rdma_cm_event* event[NUM_CLIENTS];
 struct rdma_conn_param conn_param[NUM_CLIENTS] = { };
 struct ibv_pd* pd[NUM_CLIENTS];
-struct ibv_comp_channel* comp_chan[NUM_CLIENTS];
-struct ibv_cq* cq[NUM_CLIENTS];
-struct ibv_cq* evt_cq[NUM_CLIENTS];
+struct ibv_comp_channel* comp_chan;
+struct ibv_cq* cq;
+struct ibv_cq* evt_cq;
 struct ibv_mr* mr_data[NUM_CLIENTS];
 struct ibv_mr* mr_ack_buffer[NUM_CLIENTS];
 struct ibv_qp_init_attr qp_attr[NUM_CLIENTS] = { };
@@ -35,6 +35,7 @@ struct ibv_wc wc;
 
 void* cq_context;
 struct sockaddr_in sockin;
+uint64_t wr_count = 1;
 int i, n, err;
 
 uint8_t* data;
@@ -81,7 +82,7 @@ void data_init() {
     for (i = 0; i < NUM_CLIENTS; ++i) {
         *(uint64_t*)(data + BUFFER_SIZE * i) = htonll(data_size[i]);
         *(uint64_t*)(data + BUFFER_SIZE * i + sizeof(uint64_t)) = htonll(data_offset[i]);
-        sprintf(data + BUFFER_SIZE * i + 2 * sizeof(uint64_t), "data_%x", i);
+        strcpy(data + BUFFER_SIZE * i + 2 * sizeof(uint64_t), data_filename);
         size = fread(data + BUFFER_SIZE * i + BUFFER_HEADER_SIZE,
                      data_size[i], 1, pfile);
         assert(size == 1);
@@ -130,13 +131,16 @@ void network_init() {
         pd[i] = ibv_alloc_pd(cm_id[i]->verbs);
         assert(pd[i]);
 
-        comp_chan[i] = ibv_create_comp_channel(cm_id[i]->verbs);
-        assert(comp_chan[i]);
         
-        cq[i] = ibv_create_cq(cm_id[i]->verbs, 10, 0, comp_chan[i], 0);
-        assert(cq[i]);
+        if (!i) {
+            comp_chan = ibv_create_comp_channel(cm_id[i]->verbs);
+            assert(comp_chan);
 
-        err = ibv_req_notify_cq(cq[i], 0);
+            cq = ibv_create_cq(cm_id[i]->verbs, NUM_CLIENTS * 3, 0, comp_chan, 0);
+            assert(cq);
+        }
+
+        err = ibv_req_notify_cq(cq, 0);
         assert(err == 0);
 
         mr_data[i] = ibv_reg_mr(pd[i], data + BUFFER_SIZE * i, 
@@ -154,8 +158,8 @@ void network_init() {
         qp_attr[i].cap.max_send_sge = 10;
         qp_attr[i].cap.max_recv_wr = 10;
         qp_attr[i].cap.max_recv_sge = 10;
-        qp_attr[i].send_cq = cq[i];
-        qp_attr[i].recv_cq = cq[i];
+        qp_attr[i].send_cq = cq;
+        qp_attr[i].recv_cq = cq;
         qp_attr[i].qp_type = IBV_QPT_RC;
         
         err = rdma_create_qp(cm_id[i], pd[i], &qp_attr[i]);
@@ -203,7 +207,7 @@ void post_send_data(int i, uint8_t* buffer, size_t length) {
     sge_send[i].length = length;
     sge_send[i].lkey = mr_data[i]->lkey;
 
-    send_wr[i].wr_id = 1;
+    send_wr[i].wr_id = wr_count++;
     send_wr[i].opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
     send_wr[i].send_flags = IBV_SEND_SIGNALED;
     send_wr[i].sg_list = &sge_send[i];
@@ -215,15 +219,15 @@ void post_send_data(int i, uint8_t* buffer, size_t length) {
     assert(err == 0);
 
     /* Wait for send completion */
-    err = ibv_get_cq_event(comp_chan[i], &evt_cq[i], &cq_context); 
+    err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context); 
     assert(err == 0);
 
-    ibv_ack_cq_events(evt_cq[i], 1);
+    ibv_ack_cq_events(evt_cq, 1);
 
-    err = ibv_req_notify_cq(cq[i], 0);
+    err = ibv_req_notify_cq(cq, 0);
     assert(err == 0);
 
-    n = ibv_poll_cq(cq[i], 1, &wc);
+    n = ibv_poll_cq(cq, 1, &wc);
     assert(n >= 1);
     assert(wc.status == IBV_WC_SUCCESS);
 }
@@ -235,7 +239,7 @@ void post_receive_ack(int i) {
     sge_recv[i].length = sizeof(ack_buffer[i]);
     sge_recv[i].lkey = mr_ack_buffer[i]->lkey;
 
-    recv_wr[i].wr_id = 1;
+    recv_wr[i].wr_id = wr_count++;
     recv_wr[i].sg_list = &sge_recv[i];
     recv_wr[i].num_sge = 1;
     
@@ -245,15 +249,15 @@ void post_receive_ack(int i) {
 
 void wait_ack(int i) {
     /* Wait for ack */
-    err = ibv_get_cq_event(comp_chan[i], &evt_cq[i], &cq_context);
+    err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context);
     assert(err == 0);
 
-    ibv_ack_cq_events(evt_cq[i], 1);
+    ibv_ack_cq_events(evt_cq, 1);
 
-    err = ibv_req_notify_cq(cq[i], 0);
+    err = ibv_req_notify_cq(cq, 0);
     assert(err == 0);
 
-    n = ibv_poll_cq(cq[i], 1, &wc);
+    n = ibv_poll_cq(cq, 1, &wc);
     assert(n >= 1);
     assert(wc.status == IBV_WC_SUCCESS);
 }
@@ -269,9 +273,10 @@ int main(int argc, char** argv) {
         for (i = 0; i < NUM_CLIENTS; ++i) {
             post_receive_ack(i);
             post_send_data(i, data + BUFFER_SIZE * i, BUFFER_HEADER_SIZE + data_size[i]);
-            wait_ack(i);
-            printf("%d ack \n", i);
         }
+
+        for (i = 0; i < NUM_CLIENTS; ++i)
+            wait_ack(i);
 
         break;
     }

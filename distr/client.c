@@ -42,16 +42,23 @@ struct addrinfo hints = {
     .ai_socktype = SOCK_STREAM
 };
 int n, i, err;
-size_t size;
 
 uint8_t* data;
+uint8_t* output[ROW];
 uint64_t ack_buffer;
 
 void data_init() {
     data = (uint8_t*)malloc(BUFFER_SIZE);
+
+    output[0] = (uint8_t*)malloc(BUFFER_BODY_SIZE / COLUMN * ROW);
+    for (i = 0; i < ROW; ++i) 
+        output[i] = output[0] + BUFFER_BODY_SIZE / COLUMN * i;
+
+    ec_method_initialize();
 }
 
 void data_release() {
+    free(output[0]);
     free(data);
 }
 
@@ -233,21 +240,30 @@ void send_ack() {
 }
 
 void handle_data() {
-    FILE* pfile;
-    char filename[PATH_MAX];
     size_t size, data_offset, data_size;
+    char filename[PATH_MAX];
+    FILE* pfile;
 
     data_size = ntohll(*(uint64_t*)(data));
     data_offset = ntohll(*(uint64_t*)(data + sizeof(uint64_t)));
 
-    printf("client %d: data offset %lu, data size %lu \n", 
-           client_pdata.index, data_offset, data_size);
+    /*
+    printf("data_size == %lu\n", data_size);
+    printf("data_offset == %lu\n", data_offset);
+    printf("filename == %s\n", data + 2 * sizeof(uint64_t));
+    */
 
-    sprintf(filename, "%s", data + 2 * sizeof(uint64_t));
-    pfile = fopen(filename, "wb");
-    size = fwrite(data + BUFFER_HEADER_SIZE, data_size, 1, pfile);
-    assert(size == 1);
-    fclose(pfile);
+    size = ec_method_batch_encode(data_size, COLUMN, ROW, data + BUFFER_HEADER_SIZE, output);
+    assert(size == data_size / COLUMN);
+
+    for (i = 0; i < ROW; ++i) {
+        sprintf(filename, "%s_%d", data + 2 * sizeof(uint64_t), i);
+        pfile = fopen(filename, "rb+");
+        fseek(pfile, data_offset / COLUMN, SEEK_SET);
+        size = fwrite(output[i], data_size / COLUMN, 1, pfile);
+        assert(size == 1);
+        fclose(pfile);
+    }
 }
 
 int main(int argc, char** argv) {
