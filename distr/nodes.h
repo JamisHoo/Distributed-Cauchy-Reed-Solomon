@@ -18,7 +18,7 @@ const char server_ip[] = "192.168.50.1";
 
 #define NUM_BRICKS (ROW)
 
-#define ENCODE_BLOCK_SIZE (EC_METHOD_CHUNK_SIZE * COLUMN) // TODO
+#define ENCODE_BLOCK_SIZE (EC_METHOD_CHUNK_SIZE * COLUMN) 
 
 struct rdma_private_data {
     int index;
