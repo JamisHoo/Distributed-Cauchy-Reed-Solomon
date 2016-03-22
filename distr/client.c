@@ -175,6 +175,9 @@ void network_init() {
 void network_release() {
     ibv_dereg_mr(mr_data);
     
+    rdma_destroy_qp(cm_id);
+    ibv_destroy_cq(cq);
+    ibv_destroy_comp_channel(comp_chan);
     rdma_destroy_id(cm_id);
     rdma_destroy_event_channel(cm_channel);
 }

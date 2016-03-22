@@ -191,13 +191,15 @@ void network_init() {
 }
 
 void network_release() {
-    // TODO: release comp_chan
     for (i = 0; i < NUM_CLIENTS; ++i) {
+        rdma_destroy_qp(cm_id[i]);
         ibv_dereg_mr(mr_data[i]);
         ibv_dereg_mr(mr_ack_buffer[i]);
         rdma_destroy_id(cm_id[i]);
     }
 
+    ibv_destroy_cq(cq);
+    ibv_destroy_comp_channel(comp_chan);
     rdma_destroy_id(listen_id);
     rdma_destroy_event_channel(cm_channel);
 }
