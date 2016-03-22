@@ -20,6 +20,8 @@ const char server_ip[] = "192.168.50.1";
 
 #define ENCODE_BLOCK_SIZE (EC_METHOD_CHUNK_SIZE * COLUMN) 
 
+#define WAIT_ACK_TIMEVAL (1)
+
 struct rdma_private_data {
     int index;
     uint64_t data_va;

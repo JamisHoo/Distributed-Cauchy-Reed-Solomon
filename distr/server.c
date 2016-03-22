@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,9 +20,10 @@ struct rdma_cm_id* cm_id[NUM_CLIENTS];
 struct rdma_cm_event* event[NUM_CLIENTS];
 struct rdma_conn_param conn_param[NUM_CLIENTS] = { };
 struct ibv_pd* pd[NUM_CLIENTS];
-struct ibv_comp_channel* comp_chan;
-struct ibv_cq* cq;
-struct ibv_cq* evt_cq;
+struct ibv_comp_channel* comp_chan[NUM_CLIENTS];
+struct ibv_cq* cq[NUM_CLIENTS];
+struct ibv_cq* recv_cq;
+struct ibv_cq* evt_cq[NUM_CLIENTS];
 struct ibv_mr* mr_data[NUM_CLIENTS];
 struct ibv_mr* mr_ack_buffer[NUM_CLIENTS];
 struct ibv_qp_init_attr qp_attr[NUM_CLIENTS] = { };
@@ -36,15 +38,33 @@ struct ibv_wc wc;
 void* cq_context;
 struct sockaddr_in sockin;
 uint64_t wr_count = 1;
-int i, n, err;
+int i, j, n, err;
 
 uint8_t* data;
-size_t data_size[NUM_CLIENTS];
-size_t data_offset[NUM_CLIENTS];
 char data_filename[PATH_MAX];
 uint64_t ack_buffer[NUM_CLIENTS];
+int num_finished_jobs = 0;
+
+struct Job {
+    size_t data_size;
+    size_t data_offset;
+    uint8_t* data_ptr;
+    bool finished;
+    bool broken;
+    bool busy;
+    uint64_t wr_id;
+    uint64_t timeout;
+};
+
+struct Job jobs[NUM_CLIENTS];
 
 void data_init() {
+    for (i = 0; i < NUM_CLIENTS; ++i) {
+        jobs[i].finished = 0;
+        jobs[i].busy = 0;
+        jobs[i].broken = 0;
+    }
+
     data = (uint8_t*)malloc(BUFFER_SIZE * NUM_CLIENTS);
 
     FILE* pfile;
@@ -66,25 +86,26 @@ void data_init() {
 
     n = 0;
     for (i = 0; i < NUM_CLIENTS - 1; ++i) {
-        data_size[i] = client_size;
-        data_offset[i] = n;
-        n += data_size[i];
+        jobs[i].data_size = client_size;
+        jobs[i].data_offset = n;
+        n += jobs[i].data_size;
     }
-    data_offset[NUM_CLIENTS - 1] = n;
-    data_size[NUM_CLIENTS - 1] = file_size - n;
+    jobs[NUM_CLIENTS - 1].data_offset = n;
+    jobs[NUM_CLIENTS - 1].data_size = file_size - n;
 
-    assert(data_size[NUM_CLIENTS - 1] <= BUFFER_BODY_SIZE);
+    assert(jobs[NUM_CLIENTS - 1].data_size <= BUFFER_BODY_SIZE);
 
     printf("file size == %lu \n", file_size);
     for (i = 0; i < NUM_CLIENTS; ++i)
-        printf("data fragment %d: offset = %lu, size = %lu \n", i, data_offset[i], data_size[i]);
+        printf("data fragment %d: offset = %lu, size = %lu \n", i, jobs[i].data_offset, jobs[i].data_size);
 
     for (i = 0; i < NUM_CLIENTS; ++i) {
-        *(uint64_t*)(data + BUFFER_SIZE * i) = htonll(data_size[i]);
-        *(uint64_t*)(data + BUFFER_SIZE * i + sizeof(uint64_t)) = htonll(data_offset[i]);
+        *(uint64_t*)(data + BUFFER_SIZE * i) = htonll(jobs[i].data_size);
+        *(uint64_t*)(data + BUFFER_SIZE * i + sizeof(uint64_t)) = htonll(jobs[i].data_offset);
         strcpy(data + BUFFER_SIZE * i + 2 * sizeof(uint64_t), data_filename);
-        size = fread(data + BUFFER_SIZE * i + BUFFER_HEADER_SIZE,
-                     data_size[i], 1, pfile);
+        jobs[i].data_ptr = data + BUFFER_SIZE * i;
+        size = fread(jobs[i].data_ptr + BUFFER_HEADER_SIZE,
+                     jobs[i].data_size, 1, pfile);
         assert(size == 1);
     }
     
@@ -131,16 +152,18 @@ void network_init() {
         pd[i] = ibv_alloc_pd(cm_id[i]->verbs);
         assert(pd[i]);
 
-        
-        if (!i) {
-            comp_chan = ibv_create_comp_channel(cm_id[i]->verbs);
-            assert(comp_chan);
+        comp_chan[i] = ibv_create_comp_channel(cm_id[i]->verbs);
+        assert(comp_chan[i]);
 
-            cq = ibv_create_cq(cm_id[i]->verbs, NUM_CLIENTS * 3, 0, comp_chan, 0);
-            assert(cq);
+        if (!i) {
+            recv_cq = ibv_create_cq(cm_id[i]->verbs, NUM_CLIENTS * 3, 0, 0, 0);
+            assert(recv_cq);
         }
 
-        err = ibv_req_notify_cq(cq, 0);
+        cq[i] = ibv_create_cq(cm_id[i]->verbs, 2, 0, comp_chan[i], 0);
+        assert(cq[i]);
+
+        err = ibv_req_notify_cq(cq[i], 0);
         assert(err == 0);
 
         mr_data[i] = ibv_reg_mr(pd[i], data + BUFFER_SIZE * i, 
@@ -154,12 +177,12 @@ void network_init() {
         assert(mr_ack_buffer[i]);
 
 
-        qp_attr[i].cap.max_send_wr = 10;
-        qp_attr[i].cap.max_send_sge = 10;
-        qp_attr[i].cap.max_recv_wr = 10;
-        qp_attr[i].cap.max_recv_sge = 10;
-        qp_attr[i].send_cq = cq;
-        qp_attr[i].recv_cq = cq;
+        qp_attr[i].cap.max_send_wr = 1;
+        qp_attr[i].cap.max_send_sge = 1;
+        qp_attr[i].cap.max_recv_wr = NUM_CLIENTS;
+        qp_attr[i].cap.max_recv_sge = NUM_CLIENTS;
+        qp_attr[i].send_cq = cq[i];
+        qp_attr[i].recv_cq = recv_cq;
         qp_attr[i].qp_type = IBV_QPT_RC;
         
         err = rdma_create_qp(cm_id[i], pd[i], &qp_attr[i]);
@@ -195,22 +218,26 @@ void network_release() {
         rdma_destroy_qp(cm_id[i]);
         ibv_dereg_mr(mr_data[i]);
         ibv_dereg_mr(mr_ack_buffer[i]);
+        ibv_destroy_cq(cq[i]);
+        if (!i) ibv_destroy_cq(recv_cq);
+        ibv_destroy_comp_channel(comp_chan[i]);
         rdma_destroy_id(cm_id[i]);
     }
 
-    ibv_destroy_cq(cq);
-    ibv_destroy_comp_channel(comp_chan);
     rdma_destroy_id(listen_id);
     rdma_destroy_event_channel(cm_channel);
 }
 
 void post_send_data(int i, uint8_t* buffer, size_t length) {
+    uint64_t expected_wr_id;
+
     /* Send data to Client i */
     sge_send[i].addr = (uintptr_t)buffer;
     sge_send[i].length = length;
     sge_send[i].lkey = mr_data[i]->lkey;
 
-    send_wr[i].wr_id = wr_count++;
+    expected_wr_id = wr_count++;
+    send_wr[i].wr_id = expected_wr_id;
     send_wr[i].opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
     send_wr[i].send_flags = IBV_SEND_SIGNALED;
     send_wr[i].sg_list = &sge_send[i];
@@ -222,68 +249,91 @@ void post_send_data(int i, uint8_t* buffer, size_t length) {
     assert(err == 0);
 
     /* Wait for send completion */
-    err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context); 
+    err = ibv_get_cq_event(comp_chan[i], &evt_cq[i], &cq_context); 
     assert(err == 0);
 
-    ibv_ack_cq_events(evt_cq, 1);
+    ibv_ack_cq_events(evt_cq[i], 1);
 
-    err = ibv_req_notify_cq(cq, 0);
+    err = ibv_req_notify_cq(cq[i], 0);
     assert(err == 0);
 
-    n = ibv_poll_cq(cq, 1, &wc);
+    n = ibv_poll_cq(cq[i], 1, &wc);
+    assert(wc.wr_id == expected_wr_id);
     assert(n >= 1);
     assert(wc.status == IBV_WC_SUCCESS);
 }
 
-void post_receive_ack(int i) {
+uint64_t post_receive_ack(int i) {
+    uint64_t expected_wr_id = wr_count++;
     /* Post receive for ack */
     ack_buffer[i] = 0;
     sge_recv[i].addr = (uintptr_t)(ack_buffer + i);
     sge_recv[i].length = sizeof(ack_buffer[i]);
     sge_recv[i].lkey = mr_ack_buffer[i]->lkey;
 
-    recv_wr[i].wr_id = wr_count++;
+    recv_wr[i].wr_id = expected_wr_id;
     recv_wr[i].sg_list = &sge_recv[i];
     recv_wr[i].num_sge = 1;
     
     err = ibv_post_recv(cm_id[i]->qp, &recv_wr[i], &bad_recv_wr[i]);
     assert(err == 0);
+
+    return expected_wr_id;
 }
 
-void wait_ack(int i) {
+uint64_t wait_ack() {
     /* Wait for ack */
-    err = ibv_get_cq_event(comp_chan, &evt_cq, &cq_context);
-    assert(err == 0);
 
-    ibv_ack_cq_events(evt_cq, 1);
+    n = ibv_poll_cq(recv_cq, 1, &wc);
+    if (n == 0) 
+        return 0;
+    else if (n == 1) 
+        return wc.wr_id;
+    else 
+        assert(0);
+}
 
-    err = ibv_req_notify_cq(cq, 0);
-    assert(err == 0);
-
-    n = ibv_poll_cq(cq, 1, &wc);
-    assert(n >= 1);
-    assert(wc.status == IBV_WC_SUCCESS);
+uint64_t calc_timeout(size_t length) {
+    size_t encode_rate = 128 * 1024 * 1024; // 128MB/s
+    return 5 + length / encode_rate;
 }
 
 int main(int argc, char** argv) {
+    uint64_t ack_id;
+
     data_init();
     network_init();
 
-    while (1) {
-        printf("Press to start");
-        getchar();
+    printf("Press to start");
+    getchar();
 
-        for (i = 0; i < NUM_CLIENTS; ++i) {
-            post_receive_ack(i);
-            post_send_data(i, data + BUFFER_SIZE * i, BUFFER_HEADER_SIZE + data_size[i]);
-        }
-
-        for (i = 0; i < NUM_CLIENTS; ++i)
-            wait_ack(i);
-
-        break;
+    for (i = 0; i < NUM_CLIENTS; ++i) {
+        jobs[i].wr_id = post_receive_ack(i);
+        jobs[i].timeout = time(0) + calc_timeout(jobs[i].data_size);
+        jobs[i].busy = 1;
+        post_send_data(i, jobs[i].data_ptr, BUFFER_HEADER_SIZE + jobs[i].data_size);
     }
-    
+
+    while (1) {
+        ack_id = wait_ack();
+
+        if (ack_id == 0) {
+            // TODO: find timeout
+            sleep(WAIT_ACK_TIMEVAL);
+            continue;
+        } else {
+            // wr ack
+            for (i = 0; i < NUM_CLIENTS; ++i)
+                if (jobs[i].wr_id == ack_id) {
+                    jobs[i].finished = 1;
+                    jobs[i].busy = 0;
+                    ++num_finished_jobs;
+                    break;
+                }
+            if (num_finished_jobs == NUM_CLIENTS) break;
+        }
+    }
+
     network_release();
     data_release();
 }
