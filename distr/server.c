@@ -261,7 +261,8 @@ void post_send_data(int i, uint8_t* buffer, size_t length) {
     n = ibv_poll_cq(cq[i], 1, &wc);
     assert(wc.wr_id == expected_wr_id);
     assert(n >= 1);
-    assert(wc.status == IBV_WC_SUCCESS);
+    if (wc.status != IBV_WC_SUCCESS) 
+        printf("Warning: Send to Clinet %d failed\n", i);
 }
 
 uint64_t post_receive_ack(int i) {
@@ -284,14 +285,11 @@ uint64_t post_receive_ack(int i) {
 
 uint64_t wait_ack() {
     /* Wait for ack */
-
     n = ibv_poll_cq(recv_cq, 1, &wc);
-    if (n == 0) 
-        return 0;
-    else if (n == 1) 
+    if (n == 1 && wc.status == IBV_WC_SUCCESS) 
         return wc.wr_id;
     else 
-        assert(0);
+        return 0;
 }
 
 uint64_t calc_timeout(size_t length) {
