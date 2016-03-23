@@ -58,15 +58,13 @@ struct Job {
 struct Job jobs[NUM_CLIENTS];
 
 void data_init() {
-    for (i = 0; i < NUM_CLIENTS; ++i) {
-        jobs[i].finished = 0;
+    for (i = 0; i < NUM_CLIENTS; ++i) 
         jobs[i].broken = 0;
-    }
 
     data = (uint8_t*)malloc(BUFFER_SIZE * NUM_CLIENTS);
 
     FILE* pfile;
-    size_t file_size, client_size, size;
+    size_t file_size, padding_file_size, client_size, size;
 
     sprintf(data_filename, "data");
     pfile = fopen(data_filename, "rb");
@@ -74,7 +72,12 @@ void data_init() {
     file_size = ftell(pfile);
     fseek(pfile, 0L, SEEK_SET);
 
-    client_size = file_size / NUM_CLIENTS;
+    if (file_size % ENCODE_BLOCK_SIZE)
+        padding_file_size = (1 + file_size / ENCODE_BLOCK_SIZE) * ENCODE_BLOCK_SIZE;
+    else
+        padding_file_size = file_size;
+
+    client_size = padding_file_size / NUM_CLIENTS;
     if (client_size % ENCODE_BLOCK_SIZE) {
         client_size = (1 + client_size / ENCODE_BLOCK_SIZE) * ENCODE_BLOCK_SIZE;
         
@@ -87,27 +90,36 @@ void data_init() {
         jobs[i].data_size = client_size;
         jobs[i].data_offset = size;
         size += jobs[i].data_size;
+        
+        assert(size <= padding_file_size);
+        if (size == padding_file_size) break;
     }
     jobs[NUM_CLIENTS - 1].data_offset = size;
-    jobs[NUM_CLIENTS - 1].data_size = file_size - size;
+    jobs[NUM_CLIENTS - 1].data_size = padding_file_size - size;
 
     if (jobs[NUM_CLIENTS - 1].data_size > BUFFER_BODY_SIZE) {
         printf("File too large\n");
         assert(0);
     }
 
-    printf("file size == %lu \n", file_size);
+    printf("File size == %lu \n", file_size);
+    printf("Encode block size == %lu \n", ENCODE_BLOCK_SIZE);
+    printf("Padding %d bytes \n", padding_file_size - file_size);
     for (i = 0; i < NUM_CLIENTS; ++i)
-        printf("data fragment %d: offset = %lu, size = %lu \n", i, jobs[i].data_offset, jobs[i].data_size);
+        printf("Fragment %d: offset == %lu, size == %lu \n", i, jobs[i].data_offset, jobs[i].data_size);
 
     for (i = 0; i < NUM_CLIENTS; ++i) {
         *(uint64_t*)(data + BUFFER_SIZE * i) = htonll(jobs[i].data_size);
         *(uint64_t*)(data + BUFFER_SIZE * i + sizeof(uint64_t)) = htonll(jobs[i].data_offset);
         strcpy(data + BUFFER_SIZE * i + 2 * sizeof(uint64_t), data_filename);
         jobs[i].data_ptr = data + BUFFER_SIZE * i;
-        size = fread(jobs[i].data_ptr + BUFFER_HEADER_SIZE,
-                     jobs[i].data_size, 1, pfile);
-        assert(size == 1);
+        if (jobs[i].data_size) {
+            size = fread(
+                jobs[i].data_ptr + BUFFER_HEADER_SIZE,
+                jobs[i].data_size - (jobs[i].data_offset + jobs[i].data_size > file_size? padding_file_size - file_size: 0),
+                1, pfile);
+            assert(size == 1);
+        }
     }
     
     fclose(pfile);
@@ -307,6 +319,13 @@ int main(int argc, char** argv) {
     getchar();
 
     for (i = 0; i < NUM_CLIENTS; ++i) {
+        if (jobs[i].data_size == 0) {
+            jobs[i].finished = 1;
+            ++num_finished_jobs;
+            continue;
+        }
+
+        jobs[i].finished = 0;
         jobs[i].wr_id = post_receive_ack(i);
         jobs[i].timeout = time(0) + calc_timeout(jobs[i].data_size);
         post_send_data(i, jobs[i].data_ptr, BUFFER_HEADER_SIZE + jobs[i].data_size);
