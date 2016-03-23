@@ -12,6 +12,7 @@
 #include "ec/ec-method.h"
 
 size_t data_size;
+size_t padding_data_size;
 uint8_t* decoded;
 uint8_t* data;
 uint8_t* output[ROW];
@@ -28,20 +29,25 @@ void init(){
     data_size = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    data = (uint8_t *)malloc(data_size);
-    decoded = (uint8_t *)malloc(data_size);
+    if (data_size % ENCODE_BLOCK_SIZE)
+        padding_data_size = (1 + data_size / ENCODE_BLOCK_SIZE) * ENCODE_BLOCK_SIZE;
+    else
+        padding_data_size = data_size;
+
+    data = (uint8_t *)malloc(padding_data_size);
+    decoded = (uint8_t *)malloc(padding_data_size);
 
     size = fread(data, data_size, 1, f);
     assert(size == 1);
     fclose(f);
 
     for(i = 0;i < ROW; ++i) {
-        output[i] = (uint8_t*)malloc(data_size / COLUMN);
+        output[i] = (uint8_t*)malloc(padding_data_size / COLUMN);
         row[i] = i;
 
         sprintf(filename, "data_%d", i);
         f = fopen(filename, "rb");
-        size = fread(output[i], data_size / COLUMN, 1, f);
+        size = fread(output[i], padding_data_size / COLUMN, 1, f);
         assert(size == 1);
         fclose(f);
     }
@@ -56,7 +62,7 @@ int main(int argc, char** argv){
     init();
     printf("Finish init\n");
 
-    size = data_size / COLUMN;
+    size = padding_data_size / COLUMN;
     ec_method_decode(size, COLUMN, row, output, decoded);
 
     if (memcmp(data, decoded, data_size)) 
