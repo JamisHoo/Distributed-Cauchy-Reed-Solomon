@@ -239,7 +239,8 @@ void send_ack() {
     
     n = ibv_poll_cq(cq, 1, &wc);
     assert(n >= 1); 
-    assert(wc.status == IBV_WC_SUCCESS);
+    if (wc.status != IBV_WC_SUCCESS) 
+        printf("Warning: Client %d send ack failed\n", client_pdata.index);
 }
 
 void handle_data() {
@@ -279,7 +280,6 @@ int main(int argc, char** argv) {
         handle_data();
 
         send_ack();
-
     }
 
     network_release();
