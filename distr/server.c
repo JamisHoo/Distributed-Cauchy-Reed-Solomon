@@ -51,7 +51,6 @@ struct Job {
     uint8_t* data_ptr;
     bool finished;
     bool broken;
-    bool busy;
     uint64_t wr_id;
     uint64_t timeout;
 };
@@ -61,7 +60,6 @@ struct Job jobs[NUM_CLIENTS];
 void data_init() {
     for (i = 0; i < NUM_CLIENTS; ++i) {
         jobs[i].finished = 0;
-        jobs[i].busy = 0;
         jobs[i].broken = 0;
     }
 
@@ -84,16 +82,19 @@ void data_init() {
             client_size -= ENCODE_BLOCK_SIZE;
     }
 
-    n = 0;
+    size = 0;
     for (i = 0; i < NUM_CLIENTS - 1; ++i) {
         jobs[i].data_size = client_size;
-        jobs[i].data_offset = n;
-        n += jobs[i].data_size;
+        jobs[i].data_offset = size;
+        size += jobs[i].data_size;
     }
-    jobs[NUM_CLIENTS - 1].data_offset = n;
-    jobs[NUM_CLIENTS - 1].data_size = file_size - n;
+    jobs[NUM_CLIENTS - 1].data_offset = size;
+    jobs[NUM_CLIENTS - 1].data_size = file_size - size;
 
-    assert(jobs[NUM_CLIENTS - 1].data_size <= BUFFER_BODY_SIZE);
+    if (jobs[NUM_CLIENTS - 1].data_size > BUFFER_BODY_SIZE) {
+        printf("File too large\n");
+        assert(0);
+    }
 
     printf("file size == %lu \n", file_size);
     for (i = 0; i < NUM_CLIENTS; ++i)
@@ -310,7 +311,6 @@ int main(int argc, char** argv) {
     for (i = 0; i < NUM_CLIENTS; ++i) {
         jobs[i].wr_id = post_receive_ack(i);
         jobs[i].timeout = time(0) + calc_timeout(jobs[i].data_size);
-        jobs[i].busy = 1;
         post_send_data(i, jobs[i].data_ptr, BUFFER_HEADER_SIZE + jobs[i].data_size);
     }
 
@@ -336,7 +336,6 @@ int main(int argc, char** argv) {
                 jobs[j].data_offset = jobs[i].data_offset;
                 memcpy(jobs[j].data_ptr, jobs[i].data_ptr, BUFFER_HEADER_SIZE + jobs[j].data_size);
                 jobs[j].finished = 0;
-                jobs[j].busy = 1;
                 jobs[j].broken = 0;
                 jobs[j].wr_id = post_receive_ack(j);
                 jobs[j].timeout = time(0) + calc_timeout(jobs[j].data_size);
@@ -352,7 +351,6 @@ int main(int argc, char** argv) {
             for (i = 0; i < NUM_CLIENTS; ++i)
                 if (jobs[i].wr_id == ack_id) {
                     jobs[i].finished = 1;
-                    jobs[i].busy = 0;
                     ++num_finished_jobs;
                     printf("Client %d finished\n", i);
                     break;
