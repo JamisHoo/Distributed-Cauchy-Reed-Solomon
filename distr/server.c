@@ -318,9 +318,35 @@ int main(int argc, char** argv) {
         ack_id = wait_ack();
 
         if (ack_id == 0) {
-            // TODO: find timeout
-            sleep(WAIT_ACK_TIMEVAL);
-            continue;
+            // find timeout
+            i = 0; j = 0;
+            for (i = 0; i < NUM_CLIENTS; ++i)
+                if (jobs[i].broken == 0 && jobs[i].finished == 0 && jobs[i].timeout < time(0)) { 
+                    // find a spare client
+                    for (j = 0; j < NUM_CLIENTS; ++j) 
+                        if (j != i && jobs[j].finished == 1 && jobs[j].broken == 0) 
+                            break;
+                    break;
+                }
+            
+            if (i < NUM_CLIENTS && j < NUM_CLIENTS) {
+                printf("Client %d failed, transfer job to Client %d\n", i, j);
+                jobs[i].broken = 1;
+                jobs[j].data_size = jobs[i].data_size;
+                jobs[j].data_offset = jobs[i].data_offset;
+                memcpy(jobs[j].data_ptr, jobs[i].data_ptr, BUFFER_HEADER_SIZE + jobs[j].data_size);
+                jobs[j].finished = 0;
+                jobs[j].busy = 1;
+                jobs[j].broken = 0;
+                jobs[j].wr_id = post_receive_ack(j);
+                jobs[j].timeout = time(0) + calc_timeout(jobs[j].data_size);
+                post_send_data(j, jobs[j].data_ptr, BUFFER_HEADER_SIZE + jobs[j].data_size);
+            } else if (i < NUM_CLIENTS && j == NUM_CLIENTS) {
+                printf("Client %d failed, cannot find valid client\n", i);
+                sleep(WAIT_ACK_TIMEVAL);
+            } else {
+                sleep(WAIT_ACK_TIMEVAL);
+            }
         } else {
             // wr ack
             for (i = 0; i < NUM_CLIENTS; ++i)
@@ -328,6 +354,7 @@ int main(int argc, char** argv) {
                     jobs[i].finished = 1;
                     jobs[i].busy = 0;
                     ++num_finished_jobs;
+                    printf("Client %d finished\n", i);
                     break;
                 }
             if (num_finished_jobs == NUM_CLIENTS) break;

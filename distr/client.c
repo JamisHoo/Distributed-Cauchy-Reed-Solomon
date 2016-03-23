@@ -280,7 +280,6 @@ int main(int argc, char** argv) {
 
         send_ack();
 
-        break;
     }
 
     network_release();
