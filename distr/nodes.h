@@ -11,7 +11,7 @@ const char server_ip[] = "192.168.50.1";
 
 #define RESOLVE_TIMEOUT_MS (5000)
 #define BUFFER_HEADER_SIZE (1024)
-#define BUFFER_BODY_SIZE (1 << 27)
+#define BUFFER_BODY_SIZE (1L << 27) // maximum allowed value is 512MB
 #define BUFFER_SIZE (BUFFER_BODY_SIZE + BUFFER_HEADER_SIZE)
 #define COLUMN (4)
 #define ROW (COLUMN / 4 * 5)
