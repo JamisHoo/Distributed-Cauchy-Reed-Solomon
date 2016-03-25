@@ -63,7 +63,7 @@ int main(int argc, char** argv){
     printf("Finish init\n");
 
     size = padding_data_size / COLUMN;
-    ec_method_decode(size, COLUMN, row, output, decoded);
+    ec_method_parallel_decode(size, COLUMN, row, output, decoded, get_nprocs());
 
     if (memcmp(data, decoded, data_size)) 
         printf("wrong! \n");
