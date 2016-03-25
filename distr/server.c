@@ -305,8 +305,8 @@ uint64_t wait_ack() {
 }
 
 uint64_t calc_timeout(size_t length) {
-    size_t encode_rate = 128 * 1024 * 1024; // 128MB/s
-    return 5 + length / encode_rate;
+    size_t encode_rate = 64 * 1024 * 1024; // 128MB/s
+    return 10 + length / encode_rate;
 }
 
 int main(int argc, char** argv) {
