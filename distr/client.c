@@ -257,7 +257,7 @@ void handle_data() {
     printf("filename == %s\n", data + 2 * sizeof(uint64_t));
     */
 
-    size = ec_method_batch_encode(data_size, COLUMN, ROW, data + BUFFER_HEADER_SIZE, output);
+    size = ec_method_batch_parallel_encode(data_size, COLUMN, ROW, data + BUFFER_HEADER_SIZE, output, get_nprocs());
     assert(size == data_size / COLUMN);
 
     for (i = 0; i < ROW; ++i) {
@@ -276,7 +276,10 @@ int main(int argc, char** argv) {
 
     while (1) {
         post_receive_data();
-        wait_receive_data();
+        if (wait_receive_data()) {
+            printf("Warning: receive data failed\n");
+            continue;
+        }
         handle_data();
 
         send_ack();
