@@ -332,6 +332,8 @@ int main(int argc, char** argv) {
     }
 
     while (1) {
+        if (num_finished_jobs == NUM_CLIENTS) break;
+
         ack_id = wait_ack();
 
         if (ack_id == 0) {
@@ -372,7 +374,6 @@ int main(int argc, char** argv) {
                     printf("Client %d finished\n", i);
                     break;
                 }
-            if (num_finished_jobs == NUM_CLIENTS) break;
         }
     }
 
