@@ -10,6 +10,7 @@
 #include <rdma/rdma_cma.h>
 
 #include "nodes.h"
+#include "timer.h"
 
 struct rdma_private_data server_pdata[NUM_CLIENTS];
 struct rdma_private_data client_pdata[NUM_CLIENTS];
@@ -311,12 +312,15 @@ uint64_t calc_timeout(size_t length) {
 
 int main(int argc, char** argv) {
     uint64_t ack_id;
+    double timer;
 
     data_init();
     network_init();
 
     printf("Press to start");
     getchar();
+
+    timer = timer_start();
 
     for (i = 0; i < NUM_CLIENTS; ++i) {
         if (jobs[i].data_size == 0) {
@@ -376,6 +380,8 @@ int main(int argc, char** argv) {
                 }
         }
     }
+
+    timer_end(timer, "time elapsed: %lf\n");
 
     network_release();
     data_release();
