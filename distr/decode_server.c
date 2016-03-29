@@ -366,9 +366,9 @@ int main(int argc, char** argv) {
                 post_send_data(j, jobs[j].data_ptr, BUFFER_HEADER_SIZE + jobs[j].data_size / COLUMN * ROW);
             } else if (i < NUM_CLIENTS && j == NUM_CLIENTS) {
                 printf("Client %d failed, cannot find valid client\n", i);
-                sleep(WAIT_ACK_TIMEVAL);
+                usleep(WAIT_ACK_TIMEVAL);
             } else {
-                sleep(WAIT_ACK_TIMEVAL);
+                usleep(WAIT_ACK_TIMEVAL);
             }
         } else {
             // wr ack
