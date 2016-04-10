@@ -232,7 +232,7 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
         
         out_ptr += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * columns;
         for (i = 0; i < n_recv; ++i)
-            in_ptrs[i] += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE; // TODO: donot modify in
+            in_ptrs[i] += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE;
     }
 
     return size * columns * EC_METHOD_CHUNK_SIZE;
