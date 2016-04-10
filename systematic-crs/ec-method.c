@@ -98,7 +98,7 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     int n_first_recv, n_extra;
     int col_ind, row_ind;
     int col_eqn, row_eqn;
-    int i, s, seg_num;
+    int i, j, k, l, s, seg_num;
     uint32_t index;
     int32_t ExpFE;
 
@@ -179,13 +179,12 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
                 if (recv_index[col_ind]) {
                     ExpFE = (EC_GF_SIZE - 1 - GfLog[row_index[row_ind] ^ col_ind ^ bit[EC_GF_BITS - 1]]) % (EC_GF_SIZE - 1);
                     for (row_eqn = 0; row_eqn < EC_GF_BITS; ++row_eqn) {
-                        // j =
+                        j = EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE * (row_eqn + row_ind * EC_GF_BITS);
                         for (col_eqn = 0; col_eqn < EC_GF_BITS; ++col_eqn) {
-                            // k = 
+                            k = EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE * (col_eqn + col_ind * EC_GF_BITS);
                             if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) 
                                 for (seg_num = 0; seg_num < EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE; ++seg_num) 
-                                    M[seg_num + EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE * (row_eqn + row_ind * EC_GF_BITS)] ^=
-                                        out_ptr[seg_num + EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE * (col_eqn + col_ind * EC_GF_BITS)];
+                                    M[seg_num + j] ^= out_ptr[seg_num + k];
                         }
                     }
                 }
@@ -201,14 +200,14 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
                     ExpFE = EC_GF_SIZE - 1 - ((-ExpFE) % (EC_GF_SIZE - 1));
                 ExpFE %= EC_GF_SIZE - 1;
                 
-                // j = 
+                j = col_index[row_ind] * EC_GF_BITS * EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE;
                 for (row_eqn = 0; row_eqn < EC_GF_BITS; ++row_eqn) {
-                    // k = 
+                    k = row_eqn * EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE + j;
                     for (col_eqn = 0; col_eqn < EC_GF_BITS; ++col_eqn) {
-                        // l = 
+                        l = EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE * (col_eqn + col_ind * EC_GF_BITS);
                         if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) {
                             for (seg_num = 0; seg_num < EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE; ++seg_num)
-                                out_ptr[seg_num + row_eqn * EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE + col_index[row_ind] * EC_GF_BITS *EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE] ^= M[seg_num + EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE * (col_eqn + col_ind * EC_GF_BITS)];
+                                out_ptr[seg_num + k] ^= M[l++];
                         }
                     }
                 }
