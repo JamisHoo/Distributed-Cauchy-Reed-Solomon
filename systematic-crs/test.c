@@ -6,7 +6,7 @@
 #include "timer.h"
 #include "ec-method.h"
 
-#define MAX_DATA_SIZE (1024 * 1024 * 512) // 64MiB
+#define MAX_DATA_SIZE (1024 * 1024 * 512)
 #define MAX_COLUMN (128)
 #define MAX_ROW (MAX_COLUMN + 128)
 
