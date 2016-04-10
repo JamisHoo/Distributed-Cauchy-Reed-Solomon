@@ -86,17 +86,18 @@ void test_round() {
     int i;
     size_t size;
 
-    size_t column = rand() % MAX_COLUMN;
+    size_t column = 1 + rand() % (MAX_COLUMN - 1);
     size_t row = rand() % (MAX_ROW - MAX_COLUMN) + column;
     size_t data_size = EC_METHOD_CHUNK_SIZE * column;
-    data_size *= rand() % (MAX_DATA_SIZE / (data_size / column * row) - 1) + 1;
-    int num_remaining = rand() % 2? column: column + rand() % (row - column);
+    data_size *= rand() % (MAX_DATA_SIZE / (data_size / column * row)) + 1;
+    int num_remaining = rand() % 2? column: column + rand() % (row - column + 1);
 
-    printf("%lu = %lu + %lu, %.1fMiB, recover from %d packets \n", 
+    printf("%3lu = %3lu + %3lu, %6.1fMiB, recover from %3d packets \n", 
         row, column, row - column, (float)data_size / 1024 / 1024, num_remaining);
     
     assert(row >= column);
     assert(data_size % (EC_METHOD_CHUNK_SIZE * column) == 0);
+    assert(data_size <= MAX_DATA_SIZE);
     assert(data_size / column * row <= MAX_DATA_SIZE);
 
     for (i = 1; i < row; ++i)
