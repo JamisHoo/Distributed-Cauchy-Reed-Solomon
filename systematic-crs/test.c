@@ -146,6 +146,6 @@ int main() {
     printf("Init finished \n");
 
     // while (1) test_round();
-    measure(16, 8 + 16, 128 << 20, 8, 8);
+    measure(16, 8 + 16, 256 << 20, 8, 8);
     
 }
