@@ -116,6 +116,25 @@ void test_round() {
                             encoded, decoded);
     assert(size == data_size);
     assert(!memcmp(decoded, data, data_size));
+
+
+    size_t n_segs = data_size / EC_METHOD_CHUNK_SIZE / column;
+    size_t s = rand() % n_segs;
+    size_t e = s + rand() % (n_segs - s);
+    size_t part_data_size = EC_METHOD_CHUNK_SIZE * column * (e - s);
+    size_t part_data_offset = EC_METHOD_CHUNK_SIZE * column * s;
+
+    for (i = 0; i < row; ++i)
+        encoded[i] += part_data_offset / column;
+
+    memset(decoded + part_data_offset, 0x00, part_data_size);
+    size = ec_method_decode(part_data_size / column,
+                            column, rows, num_remaining, encoded,
+                            decoded + part_data_offset);
+    for (i = 0; i < row; ++i)
+        encoded[i] -= part_data_offset / column;
+    assert(size == part_data_size);
+    assert(!memcmp(data + part_data_offset, decoded + part_data_offset, part_data_size));
 }
 
 int main() {
