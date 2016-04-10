@@ -1,4 +1,3 @@
-#include <stdio.h> // debug
 #include <string.h>
 
 #include "ec-method.h"
@@ -23,22 +22,9 @@ void ec_method_initialize(void) {
             GfPow[i] ^= EC_GF_MOD;
     }
 
-    // TODO: 0th and 1st element of the two tables differ
     GfLog[0] = -1;
     for (i = 0; i < EC_GF_SIZE - 1; ++i)
         GfLog[GfPow[i]] = i;
-
-    /*
-    for (i = 0; i < EC_GF_SIZE; ++i) {
-        printf("%d ", GfPow[i]);
-        if (i % 16 == 15) printf("\n");
-    }
-    printf("\n");
-    for (i = 0; i < EC_GF_SIZE; ++i) {
-        printf("%d ", GfLog[i]);
-        if (i % 16 == 15) printf("\n");
-    }
-    */
 }
 
 size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row, 
@@ -206,8 +192,6 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
 
         // Fill in the recovered information in the message from the inverted
         // matrix and from M
-
-        //out_ptr = (uint64_t*)out;
 
         for (row_ind = 0; row_ind < n_extra; ++row_ind)
             for (col_ind = 0; col_ind < n_extra; ++col_ind) {
