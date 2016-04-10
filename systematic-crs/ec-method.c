@@ -104,10 +104,10 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     int recv_index[EC_METHOD_MAX_FRAGMENTS];
     int col_index[EC_METHOD_MAX_FRAGMENTS];
     int row_index[EC_METHOD_MAX_FRAGMENTS];
-    uint64_t C[EC_METHOD_MAX_FRAGMENTS];
-    uint64_t D[EC_METHOD_MAX_FRAGMENTS];
-    uint64_t E[EC_METHOD_MAX_FRAGMENTS];
-    uint64_t F[EC_METHOD_MAX_FRAGMENTS];
+    uint64_t C[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+    uint64_t D[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+    uint64_t E[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+    uint64_t F[EC_METHOD_MAX_FRAGMENTS] = { 0 };
     uint64_t M[EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * EC_METHOD_MAX_FRAGMENTS];
     int n_first_recv, n_extra;
     int col_ind, row_ind;
@@ -160,11 +160,6 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
 
     // Compute the determinant of the matrix in the finite field and then
     // compute the inverse matrix
-
-    memset(C, 0x00, sizeof(C));
-    memset(D, 0x00, sizeof(D));
-    memset(E, 0x00, sizeof(E));
-    memset(F, 0x00, sizeof(F));
 
     for (row_ind = 0; row_ind < n_extra; ++row_ind)
         for (col_ind = 0; col_ind < n_extra; ++col_ind) {
