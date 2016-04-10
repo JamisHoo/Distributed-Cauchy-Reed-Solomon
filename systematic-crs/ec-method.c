@@ -117,6 +117,7 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     int32_t ExpFE;
 
     uint64_t* out_ptr;
+    uint64_t* in_ptrs[EC_METHOD_MAX_FRAGMENTS];
     
     memset(out, 0x00, size * columns);
 
@@ -176,13 +177,15 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
         }
     
     out_ptr = (uint64_t*)out;
+    for (i = 0; i < n_recv; ++i)
+        in_ptrs[i] = (uint64_t*)in[i];
 
     for (s = 0; s < size; ++s) {
 
         row_ind = 0;
         for (i = 0; i < n_recv; ++i) 
             if (rows[i] >= columns) {
-                memcpy(M + row_ind * EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE, in[i], EC_METHOD_CHUNK_SIZE);
+                memcpy(M + row_ind * EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE, in_ptrs[i], EC_METHOD_CHUNK_SIZE);
                 ++row_ind;
                 if (row_ind >= n_extra) 
                     break;
@@ -234,7 +237,7 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
         
         out_ptr += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * columns;
         for (i = 0; i < n_recv; ++i)
-            in[i] += EC_METHOD_CHUNK_SIZE;
+            in_ptrs[i] += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE; // TODO: donot modify in
     }
 
     return size * columns * EC_METHOD_CHUNK_SIZE;
