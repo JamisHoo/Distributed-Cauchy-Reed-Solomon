@@ -138,6 +138,7 @@ void test_round() {
 }
 
 int main() {
+    int i;
     int seed = time(0);
     printf("random seed = %d \n", seed);
     srand(seed);
@@ -146,6 +147,7 @@ int main() {
     printf("Init finished \n");
 
     // while (1) test_round();
-    measure(16, 8 + 16, 256 << 20, 8, 8);
+    for (i = 0; i < 5; ++i)
+        measure(16, 8 + 16, 256 << 20, 8, 8);
     
 }
