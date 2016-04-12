@@ -10,6 +10,7 @@
 static uint32_t bit[EC_GF_BITS];
 static uint32_t GfPow[EC_GF_SIZE << 1];
 static uint32_t GfLog[EC_GF_SIZE << 1];
+static uint64_t M[EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * EC_METHOD_MAX_FRAGMENTS] __attribute__((aligned(sizeof(__m256))));
 
 void ec_method_initialize(void) {
     uint32_t i;
@@ -104,7 +105,6 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     uint64_t D[EC_METHOD_MAX_FRAGMENTS] = { 0 };
     uint64_t E[EC_METHOD_MAX_FRAGMENTS] = { 0 };
     uint64_t F[EC_METHOD_MAX_FRAGMENTS] = { 0 };
-    uint64_t M[EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * EC_METHOD_MAX_FRAGMENTS];
     int n_first_recv, n_extra;
     int col_ind, row_ind;
     int col_eqn, row_eqn;
