@@ -16,7 +16,7 @@ uint8_t* decoded;
 uint32_t rows[MAX_ROW];
 
 void init() {
-    int i;
+    int64_t i;
     
     i = posix_memalign((void**)&data, 32, MAX_DATA_SIZE);
     assert(!i);
