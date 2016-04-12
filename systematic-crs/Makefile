@@ -1,4 +1,4 @@
-CFLAGS += -O3
+CFLAGS += -O3 -mavx -msse4.2
 
 .PHONY: all
 all: test

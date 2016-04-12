@@ -15,6 +15,9 @@
 #define EC_METHOD_CHUNK_SIZE (EC_METHOD_WORD_SIZE * EC_GF_BITS)
 #define EC_METHOD_WIDTH (EC_METHOD_WORD_SIZE / EC_GF_WORD_SIZE)
 
+#if defined(__SSE4_2__) && defined(__AVX__)
+#define VECTOR
+#endif
 
 void ec_method_initialize(void);
 size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,

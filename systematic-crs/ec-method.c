@@ -2,6 +2,11 @@
 
 #include "ec-method.h"
 
+#ifdef VECTOR
+#include <immintrin.h>
+#endif
+
+
 static uint32_t bit[EC_GF_BITS];
 static uint32_t GfPow[EC_GF_SIZE << 1];
 static uint32_t GfLog[EC_GF_SIZE << 1];
@@ -67,8 +72,13 @@ size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,
                     if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) {
                         
                         // for each word
+#ifdef VECTOR
+                        for (seg_num = 0; seg_num < EC_METHOD_WORD_SIZE / sizeof(__m256); ++seg_num)
+                            ((__m256*)out_ptr)[seg_num] = _mm256_xor_ps(((__m256*)out_ptr)[seg_num], ((__m256*)in_ptr)[seg_num]);
+#else
                         for (seg_num = 0; seg_num < EC_METHOD_WIDTH; ++seg_num)
                             out_ptr[seg_num] ^= in_ptr[seg_num];
+#endif
 
                     }
                     in_ptr += EC_METHOD_WIDTH;
@@ -101,6 +111,11 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     int i, j, k, l, s, seg_num;
     uint32_t index;
     int32_t ExpFE;
+
+#ifdef VECTOR
+    __m256* M_vec_ptr;
+    __m256* out_vec_ptr;
+#endif
 
     uint64_t* out_ptr;
     uint64_t* in_ptrs[EC_METHOD_MAX_FRAGMENTS];
@@ -182,9 +197,17 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
                         j = EC_METHOD_WIDTH * (row_eqn + row_ind * EC_GF_BITS);
                         for (col_eqn = 0; col_eqn < EC_GF_BITS; ++col_eqn) {
                             k = EC_METHOD_WIDTH * (col_eqn + col_ind * EC_GF_BITS);
-                            if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) 
+                            if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) {
+#ifdef VECTOR
+                                M_vec_ptr = (__m256*)(M + j);
+                                out_vec_ptr = (__m256*)(out_ptr +k);
+                                for (seg_num = 0; seg_num < EC_METHOD_WORD_SIZE / sizeof(__m256); ++seg_num)
+                                    M_vec_ptr[seg_num] = _mm256_xor_ps(M_vec_ptr[seg_num], out_vec_ptr[seg_num]);
+#else
                                 for (seg_num = 0; seg_num < EC_METHOD_WIDTH; ++seg_num) 
                                     M[seg_num + j] ^= out_ptr[seg_num + k];
+#endif
+                            }
                         }
                     }
                 }
@@ -206,8 +229,16 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
                     for (col_eqn = 0; col_eqn < EC_GF_BITS; ++col_eqn) {
                         l = EC_METHOD_WIDTH * (col_eqn + col_ind * EC_GF_BITS);
                         if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) {
+#ifdef VECTOR
+                            M_vec_ptr = (__m256*)(M + l);
+                            out_vec_ptr = (__m256*)(out_ptr + k);
+
+                            for (seg_num = 0; seg_num < EC_METHOD_WORD_SIZE / sizeof(__m256); ++seg_num)
+                            out_vec_ptr[seg_num] = _mm256_xor_ps(out_vec_ptr[seg_num], M_vec_ptr[seg_num]);
+#else
                             for (seg_num = 0; seg_num < EC_METHOD_WIDTH; ++seg_num)
                                 out_ptr[seg_num + k] ^= M[l++];
+#endif
                         }
                     }
                 }
