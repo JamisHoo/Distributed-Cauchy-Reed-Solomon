@@ -10,17 +10,22 @@
 #define MAX_COLUMN (128)
 #define MAX_ROW (MAX_COLUMN + 128)
 
-uint8_t data[MAX_DATA_SIZE];
+uint8_t* data;
 uint8_t* encoded[MAX_ROW];
-uint8_t decoded[MAX_DATA_SIZE];
+uint8_t* decoded;
 uint32_t rows[MAX_ROW];
 
 void init() {
     int i;
     
-    for (i = 0; i < MAX_DATA_SIZE; ++i) data[i] = rand();
+    i = posix_memalign((void**)&data, 32, MAX_DATA_SIZE);
+    assert(!i);
+    i = posix_memalign((void**)&encoded[0], 32, MAX_DATA_SIZE);
+    assert(!i);
+    i = posix_memalign((void**)&decoded, 32, MAX_DATA_SIZE);
+    assert(!i);
 
-    encoded[0] = (uint8_t*)malloc(MAX_DATA_SIZE);
+    for (i = 0; i < MAX_DATA_SIZE; ++i) data[i] = rand();
 
     ec_method_initialize();
 }
