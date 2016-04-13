@@ -71,6 +71,8 @@ void measure(size_t column, size_t row, size_t data_size,
     }
     printf("\n");
 
+    memset(encoded[0], 0x00, data_size / column * row);
+
     time1 = timer_start();
     for (i = 0; i < row; ++i) {
         size = ec_method_encode(data_size, column, rows[i], data, encoded[i]);
