@@ -37,7 +37,7 @@ void measure(size_t column, size_t row, size_t data_size,
     int i;
     size_t size;
     size_t num_remaining = message_remaining + redundant_remaining;
-    double time1;
+    double time1, time2, time3;
 
     printf("%lu = %lu + %lu, %.1fMiB, recover from %lu = %lu + %lu packets \n", 
         row, column, row - column, (float)data_size / 1024 / 1024, 
@@ -74,11 +74,17 @@ void measure(size_t column, size_t row, size_t data_size,
     memset(encoded[0], 0x00, data_size / column * row);
 
     time1 = timer_start();
+    time1 = time2 = 0;
     for (i = 0; i < row; ++i) {
+        time3 = timer_start();
         size = ec_method_encode(data_size, column, rows[i], data, encoded[i]);
+        if (rows[i] < column) 
+            time1 += timer_start() - time3;
+        else
+            time2 += timer_start() - time3;
         assert(size == data_size / column);
     }
-    timer_end(time1, "encode time: %.3f \n");
+    printf("encode time: %.3f = %.3f + %.3f \n", time1 + time2, time1, time2);
 
     memset(decoded, 0x00, data_size);
     time1 = timer_start();
