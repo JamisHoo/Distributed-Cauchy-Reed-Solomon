@@ -23,6 +23,6 @@ void ec_method_initialize(void);
 size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,
                         uint8_t* in, uint8_t* out);
 size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
-                        size_t n_recv, uint8_t** in, uint8_t* out);
+                        uint8_t** in, uint8_t* out);
 
 #endif /* __EC_METHOD_H__ */

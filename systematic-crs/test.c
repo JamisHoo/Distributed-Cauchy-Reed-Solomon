@@ -39,6 +39,8 @@ void measure(size_t column, size_t row, size_t data_size,
     size_t num_remaining = message_remaining + redundant_remaining;
     double time1, time2, time3;
 
+    assert(num_remaining == column);
+
     printf("%lu = %lu + %lu, %.1fMiB, recover from %lu = %lu + %lu packets \n", 
         row, column, row - column, (float)data_size / 1024 / 1024, 
         num_remaining, message_remaining, redundant_remaining);
@@ -88,7 +90,7 @@ void measure(size_t column, size_t row, size_t data_size,
 
     memset(decoded, 0x00, data_size);
     time1 = timer_start();
-    size = ec_method_decode(data_size / column, column, rows, num_remaining,
+    size = ec_method_decode(data_size / column, column, rows,
                             encoded, decoded);
     timer_end(time1, "decode time: %.3f \n");
     assert(size == data_size);
@@ -103,7 +105,7 @@ void test_round() {
     size_t row = rand() % (MAX_ROW - MAX_COLUMN) + column;
     size_t data_size = EC_METHOD_CHUNK_SIZE * column;
     data_size *= rand() % (MAX_DATA_SIZE / (data_size / column * row)) + 1;
-    int num_remaining = rand() % 2? column: column + rand() % (row - column + 1);
+    int num_remaining = column;
 
     printf("%3lu = %3lu + %3lu, %6.1fMiB, recover from %3d packets \n", 
         row, column, row - column, (float)data_size / 1024 / 1024, num_remaining);
@@ -125,7 +127,7 @@ void test_round() {
     }
 
     memset(decoded, 0x00, data_size);
-    size = ec_method_decode(data_size / column, column, rows, num_remaining,
+    size = ec_method_decode(data_size / column, column, rows, 
                             encoded, decoded);
     assert(size == data_size);
     assert(!memcmp(decoded, data, data_size));
@@ -142,7 +144,7 @@ void test_round() {
 
     memset(decoded + part_data_offset, 0x00, part_data_size);
     size = ec_method_decode(part_data_size / column,
-                            column, rows, num_remaining, encoded,
+                            column, rows, encoded,
                             decoded + part_data_offset);
     for (i = 0; i < row; ++i)
         encoded[i] -= part_data_offset / column;

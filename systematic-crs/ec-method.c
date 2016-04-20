@@ -96,7 +96,7 @@ size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,
 }
 
 size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows, 
-                        size_t n_recv, uint8_t** in, uint8_t* out) {
+                        uint8_t** in, uint8_t* out) {
     int recv_index[EC_METHOD_MAX_FRAGMENTS];
     int col_index[EC_METHOD_MAX_FRAGMENTS];
     int row_index[EC_METHOD_MAX_FRAGMENTS];
@@ -115,6 +115,8 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     int i, j, k, l, s, seg_num;
     uint32_t index;
     int32_t ExpFE;
+
+    size_t n_recv = columns;
 
 #ifdef VECTOR
     __m256* M_vec_ptr;
