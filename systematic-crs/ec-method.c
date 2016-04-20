@@ -1,6 +1,8 @@
 #include <string.h>
+#include <pthread.h>
 
 #include "ec-method.h"
+#include "thpool.h"
 
 #ifdef VECTOR
 #include <immintrin.h>
@@ -11,7 +13,18 @@ static uint32_t bit[EC_GF_BITS];
 static uint32_t GfPow[EC_GF_SIZE << 1];
 static uint32_t GfLog[EC_GF_SIZE << 1];
 
-void ec_method_initialize(void) {
+static threadpool thpool;
+static int processor_count;
+
+typedef struct {
+    size_t size;
+    uint32_t columns, row;
+    uint8_t* in;
+    uint8_t* out;
+} ec_encode_param_t;
+
+
+void ec_method_initialize(int processor_count_) {
     uint32_t i;
     uint32_t carry_mask;
 
@@ -30,10 +43,13 @@ void ec_method_initialize(void) {
     GfLog[0] = -1;
     for (i = 0; i < EC_GF_SIZE - 1; ++i)
         GfLog[GfPow[i]] = i;
+
+    thpool = thpool_init(processor_count_);
+    processor_count = processor_count_;
 }
 
-size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row, 
-                        uint8_t* in, uint8_t* out) {
+size_t ec_method_encode_impl(size_t size, uint32_t columns, uint32_t row, 
+                             uint8_t* in, uint8_t* out) {
     uint32_t i;
     uint32_t col, row_eqn, col_eqn, seg_num;
     uint32_t ExpFE;
@@ -94,6 +110,60 @@ size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,
     
     return size * EC_METHOD_CHUNK_SIZE;
 }
+
+static void* ec_method_single_encode(void* param) {
+    ec_encode_param_t* ec_param = (ec_encode_param_t*)param;
+    size_t size = ec_param->size;
+    uint32_t columns = ec_param->columns;
+    uint32_t row = ec_param->row;
+    uint8_t* in = ec_param->in;
+    uint8_t* out = ec_param->out;
+
+    ec_method_encode_impl(size, columns, row, in, out);
+
+    return 0;
+}
+
+size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row, 
+                        uint8_t* in, uint8_t* out) {
+    uint32_t i, j;
+    uint8_t* in_ptr = in;
+    uint8_t* out_ptr = out;
+    size_t original_size = size;
+    pthread_t* threads = malloc(sizeof(pthread_t) * processor_count);
+    ec_encode_param_t* params = malloc(sizeof(ec_encode_param_t) * processor_count);
+    size /= EC_METHOD_CHUNK_SIZE * columns;
+
+    for (i = 0; i < processor_count; ++i) {
+        params[i] = (ec_encode_param_t) {
+            .size = (size / processor_count + (i < (size % processor_count))) * EC_METHOD_CHUNK_SIZE * columns,
+            .columns = columns,
+            .row = row,
+            .in = in_ptr,
+            .out = out_ptr
+        };
+        in_ptr += params[i].size;
+        out_ptr += params[i].size / columns;
+#if AUTO_THPOOL
+        if (original_size < THR_THPOOL)
+            ec_method_single_encode((void*)(params + i));
+        else 
+            thpool_add_work(thpool, ec_method_single_encode, (void*)(params + i));
+#else
+        thpool_add_work(thpool, ec_method_single_encode, (void*)(params + i));
+#endif
+    }
+#if AUTO_THPOOL
+    if (original_size >= THR_THPOOL)
+        thpool_wait(thpool);
+#else
+    thpool_wait(thpool);
+#endif
+
+    free(params);
+    free(threads);
+    return size * EC_METHOD_CHUNK_SIZE;
+} 
 
 size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows, 
                         uint8_t** in, uint8_t* out) {

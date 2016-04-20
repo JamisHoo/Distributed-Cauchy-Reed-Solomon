@@ -27,7 +27,7 @@ void init() {
 
     for (i = 0; i < MAX_DATA_SIZE; ++i) data[i] = rand();
 
-    ec_method_initialize();
+    ec_method_initialize(4);
 }
 
 void swap(uint32_t* a, uint32_t* b) { uint32_t c = *a; *a = *b; *b = c; }
