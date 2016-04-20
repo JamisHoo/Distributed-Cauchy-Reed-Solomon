@@ -1,6 +1,6 @@
 CFLAGS += -O3 -mavx -msse4.2
 
-LDFLAGS += -lpthread
+LDFLAGS += -pthread
 
 .PHONY: all
 all: test
