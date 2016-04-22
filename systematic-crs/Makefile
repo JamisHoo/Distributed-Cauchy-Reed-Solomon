@@ -1,4 +1,4 @@
-CFLAGS += -O3 -mavx -msse4.2
+CFLAGS += -Wextra -Wno-sign-compare -O3 -mavx -msse4.2
 
 LDFLAGS += -pthread
 
