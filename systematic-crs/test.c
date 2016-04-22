@@ -126,6 +126,11 @@ void test_round() {
         assert(size == data_size / column);
     }
 
+    /*
+    size = ec_method_batch_encode(data_size, column, num_remaining, rows, data, encoded);
+    assert(size == data_size / column);
+    */
+
     memset(decoded, 0x00, data_size);
     size = ec_method_decode(data_size / column, column, rows, 
                             encoded, decoded);
