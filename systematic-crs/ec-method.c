@@ -139,6 +139,85 @@ size_t ec_method_encode_impl(size_t size, uint32_t columns, uint32_t row,
     return size * EC_METHOD_CHUNK_SIZE;
 }
 
+size_t ec_method_batch_encode_impl(size_t size, uint32_t columns, 
+                                   uint32_t total_rows, uint32_t* rows, 
+                                   uint8_t* in, uint8_t** out, size_t out_offset) {
+    uint32_t i, r;
+    uint32_t col, row_eqn, col_eqn, seg_num;
+    uint32_t ExpFE;
+
+    uint64_t* in_ptr = (uint64_t*)in;
+    uint64_t* out_ptrs[EC_METHOD_MAX_FRAGMENTS];
+    for (i = 0; i < total_rows; ++i)
+        out_ptrs[i] = (uint64_t*)(out[i] + out_offset);
+
+    size /= EC_METHOD_CHUNK_SIZE * columns;
+
+    for (i = 0; i < size; ++i) {
+        for (r = 0; r < total_rows; ++r) {
+            if (rows[r] < columns) 
+                memcpy(out_ptrs[r], in_ptr + rows[r] * EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE, EC_METHOD_CHUNK_SIZE);
+            /*
+            else
+                memset(out_ptrs[r], 0x00, EC_METHOD_CHUNK_SIZE); TODO: where
+            */
+            out_ptrs[r] += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE;
+        }
+        in_ptr += EC_METHOD_CHUNK_SIZE * columns / EC_GF_WORD_SIZE;
+    }
+
+    in_ptr = (uint64_t*)in;
+    for (i = 0; i < total_rows; ++i)
+        out_ptrs[i] = (uint64_t*)(out[i] + out_offset);
+
+    for (r = 0; r < total_rows; ++r) 
+        if (rows[r] >= columns)
+            memset(out_ptrs[r], 0x00, size * EC_METHOD_CHUNK_SIZE);
+
+    for (i = 0; i < size; ++i) {
+        for (r = 0; r < total_rows; ++r) {
+            if (rows[r] < columns) continue;
+
+            // for each message column
+            for (col = 0; col < columns; ++col) {
+                ExpFE = (EC_GF_SIZE - 1 - GfLog[(rows[r] - columns) ^ col ^ bit[EC_GF_BITS - 1]]) % (EC_GF_SIZE - 1);
+
+                // for each row in a single galois field element matrix
+                for (row_eqn = 0; row_eqn < EC_GF_BITS; ++row_eqn) {
+
+                    // for each bit in a single galios field element matrix row
+                    for (col_eqn = 0; col_eqn < EC_GF_BITS; ++col_eqn) {
+
+                        // if this bit is 1
+                        if (GfPow[ExpFE + row_eqn] & bit[col_eqn]) {
+
+                            // for each word
+#ifdef VECTOR
+                            for (seg_num = 0; seg_num < EC_METHOD_WORD_SIZE / sizeof(__m256); ++seg_num)
+                                ((__m256*)(out_ptrs[r]))[seg_num] = _mm256_xor_ps(((__m256*)(out_ptrs[r]))[seg_num], ((__m256*)in_ptr)[seg_num]);
+#else
+                            for (seg_num = 0; seg_num < EC_METHOD_WIDTH; ++seg_num)
+                                out_ptrs[r][seg_num] ^= in_ptr[seg_num];
+#endif
+
+                        }
+                        in_ptr += EC_METHOD_WIDTH;
+                    }
+                    in_ptr -= EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE;
+                    out_ptrs[r] += EC_METHOD_WIDTH;
+                }
+                in_ptr += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE;
+                out_ptrs[r] -= EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE;
+            }
+            out_ptrs[r] += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE;
+            in_ptr -= EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * columns;
+        }
+        in_ptr += EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * columns;
+    }
+
+    return size * EC_METHOD_CHUNK_SIZE;
+}
+
 static void* ec_method_single_encode(void* param) {
     ec_encode_param_t* ec_param = (ec_encode_param_t*)param;
     size_t size = ec_param->size;
@@ -162,10 +241,7 @@ static void* ec_method_batch_single_encode(void* param) {
     size_t out_offset = ec_param->out_offset;
     uint32_t* rows = ec_param->rows;
 
-    int i;
-
-    for (i = 0; i < total_rows; ++i) 
-        ec_method_encode_impl(size, columns, rows[i], in, out[i] + out_offset);
+    ec_method_batch_encode_impl(size, columns, total_rows, rows, in, out, out_offset);
 
     return 0;
 }
