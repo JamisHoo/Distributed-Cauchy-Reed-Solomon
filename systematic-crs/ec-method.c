@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 
@@ -153,10 +154,9 @@ static void* ec_method_batch_single_encode(void* param) {
 
 size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,
                         uint8_t* in, uint8_t* out) {
-    uint32_t i, j;
+    uint32_t i;
     uint8_t* in_ptr = in;
     uint8_t* out_ptr = out;
-    size_t original_size = size;
     ec_encode_param_t* params = malloc(sizeof(ec_encode_param_t) * processor_count);
     size /= EC_METHOD_CHUNK_SIZE * columns;
 
@@ -192,9 +192,8 @@ size_t ec_method_encode(size_t size, uint32_t columns, uint32_t row,
 
 size_t ec_method_batch_encode(size_t size, uint32_t columns, uint32_t total_rows,
                               uint32_t* rows, uint8_t* in, uint8_t** out) {
-    uint32_t i,j;
+    uint32_t i;
     size_t out_offset = 0;
-    size_t original_size = size;
     ec_encode_batch_param_t* params = malloc(sizeof(ec_encode_batch_param_t) * processor_count);
     size /= EC_METHOD_CHUNK_SIZE * columns;
 
