@@ -34,6 +34,24 @@ typedef struct {
     size_t out_offset;
 } ec_encode_batch_param_t;
 
+typedef struct {
+    size_t size;
+    uint32_t columns;
+    uint32_t* rows;
+    uint8_t** in;
+    uint8_t* out;
+    size_t in_offset;
+
+    size_t n_extra;
+    int* recv_index;
+    int* col_index;
+    int* row_index;
+    uint64_t* C;
+    uint64_t* D;
+    uint64_t* E;
+    uint64_t* F;
+} ec_decode_param_t;
+
 void ec_method_initialize(int processor_count_) {
     uint32_t i;
     uint32_t carry_mask;
@@ -234,92 +252,29 @@ size_t ec_method_batch_encode(size_t size, uint32_t columns, uint32_t total_rows
     return size * EC_METHOD_CHUNK_SIZE;
 }
 
-size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows, 
-                        uint8_t** in, uint8_t* out) {
-    int recv_index[EC_METHOD_MAX_FRAGMENTS];
-    int col_index[EC_METHOD_MAX_FRAGMENTS];
-    int row_index[EC_METHOD_MAX_FRAGMENTS];
-    uint64_t C[EC_METHOD_MAX_FRAGMENTS] = { 0 };
-    uint64_t D[EC_METHOD_MAX_FRAGMENTS] = { 0 };
-    uint64_t E[EC_METHOD_MAX_FRAGMENTS] = { 0 };
-    uint64_t F[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+size_t ec_method_decode_impl(size_t size, uint32_t columns, uint32_t* rows, uint8_t** in, uint8_t* out, size_t in_offset,
+                             size_t n_extra, int* recv_index, int* row_index, int* col_index,
+                             uint64_t* C, uint64_t* D, uint64_t* E, uint64_t* F) {
+    int i, j, k, l, s, seg_num;
+    int col_ind, row_ind, col_eqn, row_eqn;
+    size_t n_recv = columns;
+    int32_t ExpFE;
 #ifdef VECTOR
     uint64_t M[EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * EC_METHOD_MAX_FRAGMENTS] __attribute__((aligned(sizeof(__m256))));
-#else
-    uint64_t M[EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * EC_METHOD_MAX_FRAGMENTS];
-#endif
-    int n_first_recv, n_extra;
-    int col_ind, row_ind;
-    int col_eqn, row_eqn;
-    int i, j, k, l, s, seg_num;
-    uint32_t index;
-    int32_t ExpFE;
-
-    size_t n_recv = columns;
-
-#ifdef VECTOR
     __m256* M_vec_ptr;
     __m256* out_vec_ptr;
+#else
+    uint64_t M[EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE * EC_METHOD_MAX_FRAGMENTS];
 #endif
 
     uint64_t* out_ptr;
     uint64_t* in_ptrs[EC_METHOD_MAX_FRAGMENTS];
-    
-    memset(out, 0x00, size * columns);
 
     size /= EC_METHOD_CHUNK_SIZE;
-    
-    n_first_recv = 0;
-    for (i = 0; i < columns; ++i)
-        recv_index[i] = 0;
 
-    for (i = 0; i < n_recv; ++i) {
-        index = rows[i];
-        if (index < columns) {
-            recv_index[index] = 1;
-
-            for (s = 0; s < size; ++s)
-                memcpy(out + EC_METHOD_CHUNK_SIZE * index + s * EC_METHOD_CHUNK_SIZE * columns,
-                       in[i] + s * EC_METHOD_CHUNK_SIZE, 
-                       EC_METHOD_CHUNK_SIZE);
-
-            n_first_recv++;
-        }
-    }
-
-    n_extra = columns - n_first_recv;
-
-    col_ind = 0;
-    for (i = 0; i < columns; ++i)
-        if (!recv_index[i])
-            col_index[col_ind++] = i;
-
-    row_ind = 0;
-    for (i = 0; i < n_recv; ++i) 
-        if (rows[i] >= columns) {
-            row_index[row_ind] = rows[i] - columns;
-
-            ++row_ind;
-            if (row_ind >= n_extra)
-                break;
-        }
-
-    // Compute the determinant of the matrix in the finite field and then
-    // compute the inverse matrix
-
-    for (row_ind = 0; row_ind < n_extra; ++row_ind)
-        for (col_ind = 0; col_ind < n_extra; ++col_ind) {
-            if (col_ind != row_ind) {
-                C[row_ind] += GfLog[row_index[row_ind] ^ row_index[col_ind]];
-                D[col_ind] += GfLog[col_index[row_ind] ^ col_index[col_ind]];
-            }
-            E[row_ind] += GfLog[row_index[row_ind] ^ col_index[col_ind] ^ bit[EC_GF_BITS - 1]];
-            F[col_ind] += GfLog[row_index[row_ind] ^ col_index[col_ind] ^ bit[EC_GF_BITS - 1]];
-        }
-    
     out_ptr = (uint64_t*)out;
     for (i = 0; i < n_recv; ++i)
-        in_ptrs[i] = (uint64_t*)in[i];
+        in_ptrs[i] = (uint64_t*)(in[i] + in_offset);
 
     for (s = 0; s < size; ++s) {
 
@@ -395,5 +350,125 @@ size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows,
     }
 
     return size * columns * EC_METHOD_CHUNK_SIZE;
+}
 
+void* ec_method_single_decode(void* param) {
+    ec_decode_param_t* ec_param = (ec_decode_param_t*)param;
+    size_t size = ec_param->size;
+    uint32_t columns = ec_param->columns;
+    uint32_t* rows = ec_param->rows;
+    uint8_t** in = ec_param->in;
+    uint8_t* out = ec_param->out;
+    size_t in_offset = ec_param->in_offset;
+    
+    size_t n_extra = ec_param->n_extra;
+    int* recv_index = ec_param->recv_index;
+    int* col_index = ec_param->col_index;
+    int* row_index = ec_param->row_index;
+    uint64_t* C = ec_param->C;
+    uint64_t* D = ec_param->D;
+    uint64_t* E = ec_param->E;
+    uint64_t* F = ec_param->F;
+
+    ec_method_decode_impl(size, columns, rows, in, out, in_offset,
+                          n_extra, recv_index, row_index, col_index,
+                          C, D, E, F);
+    return 0;
+}
+
+
+size_t ec_method_decode(size_t size, uint32_t columns, uint32_t* rows, 
+                        uint8_t** in, uint8_t* out) {
+    int recv_index[EC_METHOD_MAX_FRAGMENTS];
+    int col_index[EC_METHOD_MAX_FRAGMENTS];
+    int row_index[EC_METHOD_MAX_FRAGMENTS];
+    uint64_t C[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+    uint64_t D[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+    uint64_t E[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+    uint64_t F[EC_METHOD_MAX_FRAGMENTS] = { 0 };
+
+    int n_first_recv, n_extra;
+    int col_ind, row_ind;
+    int i, s;
+    uint32_t index;
+    size_t in_offset;
+
+    size_t n_recv = columns;
+
+    memset(out, 0x00, size * columns);
+
+    size /= EC_METHOD_CHUNK_SIZE;
+    
+    n_first_recv = 0;
+    for (i = 0; i < columns; ++i)
+        recv_index[i] = 0;
+
+    for (i = 0; i < n_recv; ++i) {
+        index = rows[i];
+        if (index < columns) {
+            recv_index[index] = 1;
+
+            for (s = 0; s < size; ++s)
+                memcpy(out + EC_METHOD_CHUNK_SIZE * index + s * EC_METHOD_CHUNK_SIZE * columns,
+                       in[i] + s * EC_METHOD_CHUNK_SIZE, 
+                       EC_METHOD_CHUNK_SIZE);
+
+            n_first_recv++;
+        }
+    }
+
+    n_extra = columns - n_first_recv;
+
+    col_ind = 0;
+    for (i = 0; i < columns; ++i)
+        if (!recv_index[i])
+            col_index[col_ind++] = i;
+
+    row_ind = 0;
+    for (i = 0; i < n_recv; ++i) 
+        if (rows[i] >= columns) {
+            row_index[row_ind] = rows[i] - columns;
+
+            ++row_ind;
+            if (row_ind >= n_extra)
+                break;
+        }
+
+    // Compute the determinant of the matrix in the finite field and then
+    // compute the inverse matrix
+
+    for (row_ind = 0; row_ind < n_extra; ++row_ind)
+        for (col_ind = 0; col_ind < n_extra; ++col_ind) {
+            if (col_ind != row_ind) {
+                C[row_ind] += GfLog[row_index[row_ind] ^ row_index[col_ind]];
+                D[col_ind] += GfLog[col_index[row_ind] ^ col_index[col_ind]];
+            }
+            E[row_ind] += GfLog[row_index[row_ind] ^ col_index[col_ind] ^ bit[EC_GF_BITS - 1]];
+            F[col_ind] += GfLog[row_index[row_ind] ^ col_index[col_ind] ^ bit[EC_GF_BITS - 1]];
+        }
+
+    ec_decode_param_t* params = malloc(sizeof(ec_decode_param_t) * processor_count);
+    in_offset = 0;
+    for (i = 0; i < processor_count; ++i) {
+        params[i] = (ec_decode_param_t) {
+            .size = (size / processor_count + (i < (size % processor_count))) * EC_METHOD_CHUNK_SIZE,
+            .columns = columns,
+            .rows = rows,
+            .in = in,
+            .out = out,
+            .in_offset = in_offset,
+            .n_extra = n_extra,
+            .recv_index = recv_index,
+            .col_index = col_index,
+            .row_index = row_index,
+            .C = C, .D = D, .E = E, .F = F
+        };
+        in_offset += params[i].size;
+        out += params[i].size * columns;
+        thpool_add_work(thpool, ec_method_single_decode, (void*)(params + i));
+    }
+    thpool_wait(thpool);
+    free(params);
+
+    return size * EC_METHOD_CHUNK_SIZE * columns;
 }
