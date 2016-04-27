@@ -128,7 +128,7 @@ size_t ec_method_batch_encode_impl(size_t size, uint32_t columns,
     for (i = 0; i < size; ++i) {
         for (r = 0; r < total_rows; ++r) {
             if (rows[r] < columns) 
-                memcpy(out_ptrs[r], in_ptr + rows[r] * EC_METHOD_CHUNK_SIZE / EC_GF_WORD_SIZE, EC_METHOD_CHUNK_SIZE);
+                memcpy(out_ptrs[r], in_ptr + rows[r] * EC_METHOD_CHUNK_SIZE, EC_METHOD_CHUNK_SIZE);
             /*
             else
                 memset(out_ptrs[r], 0x00, EC_METHOD_CHUNK_SIZE); TODO: where
