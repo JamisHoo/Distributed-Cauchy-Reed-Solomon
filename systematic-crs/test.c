@@ -153,6 +153,9 @@ void test_round() {
 }
 
 int main() {
+    printf("EC_GF_WORD_SIZE == %lu \n", EC_GF_WORD_SIZE);
+    printf("EC_METHOD_WORD_SIZE == %d \n", EC_METHOD_WORD_SIZE);
+    printf("EC_METHOD_WIDTH == %lu \n", EC_METHOD_WIDTH);
     int i;
     int seed = time(0);
     printf("random seed = %d \n", seed);
@@ -163,6 +166,6 @@ int main() {
 
     // while (1) test_round();
     for (i = 0; i < 5; ++i)
-        measure(16, 8 + 16, 256 << 20, 8, 8);
+        measure(48, 48 + 16, 288 << 20, 32, 16);
     
 }
