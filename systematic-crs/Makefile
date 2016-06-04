@@ -1,4 +1,4 @@
-CFLAGS += -Wextra -Wno-sign-compare -O3 -mavx -msse4.2
+CFLAGS += -Wextra -Wno-sign-compare -O3 -mavx2 -msse4.2
 
 .PHONY: all
 all: test
