@@ -127,41 +127,23 @@ size_t ec_method_batch_encode_impl(size_t size, uint32_t columns,
 
     for (i = 0; i < size; ++i) {
         for (r = 0; r < total_rows; ++r) {
-            if (rows[r] < columns) 
+            if (rows[r] < columns) {
                 memcpy(out_ptrs[r], in_ptr + rows[r] * EC_METHOD_CHUNK_SIZE, EC_METHOD_CHUNK_SIZE);
-            /*
-            else
-                memset(out_ptrs[r], 0x00, EC_METHOD_CHUNK_SIZE); TODO: where
-            */
-            out_ptrs[r] += EC_METHOD_CHUNK_SIZE;
-        }
-        in_ptr += EC_METHOD_CHUNK_SIZE * columns;
-    }
+            } else {
+                memset(out_ptrs[r], 0x00, EC_METHOD_CHUNK_SIZE);
 
-    in_ptr = in;
-    for (i = 0; i < total_rows; ++i)
-        out_ptrs[i] = out[i] + out_offset;
-
-    for (r = 0; r < total_rows; ++r) 
-        if (rows[r] >= columns)
-            memset(out_ptrs[r], 0x00, size * EC_METHOD_CHUNK_SIZE);
-
-    for (i = 0; i < size; ++i) {
-        for (r = 0; r < total_rows; ++r) {
-            if (rows[r] < columns) continue;
-
-            // for each message column
-            for (col = 0; col < columns; ++col) {
-                ExpFE = (EC_GF_SIZE - 1 - GfLog[(rows[r] - columns) ^ col ^ bit[EC_GF_BITS - 1]]) % (EC_GF_SIZE - 1);
-                ec_gf_muladd[GfPow[ExpFE]](out_ptrs[r], in_ptr, EC_METHOD_WIDTH);
-                in_ptr += EC_METHOD_CHUNK_SIZE;
+                // for each message column
+                for (col = 0; col < columns; ++col) {
+                    ExpFE = (EC_GF_SIZE - 1 - GfLog[(rows[r] - columns) ^ col ^ bit[EC_GF_BITS - 1]]) % (EC_GF_SIZE - 1);
+                    ec_gf_muladd[GfPow[ExpFE]](out_ptrs[r], in_ptr, EC_METHOD_WIDTH);
+                    in_ptr += EC_METHOD_CHUNK_SIZE;
+                }
+                in_ptr -= EC_METHOD_CHUNK_SIZE * columns;
             }
             out_ptrs[r] += EC_METHOD_CHUNK_SIZE;
-            in_ptr -= EC_METHOD_CHUNK_SIZE * columns;
         }
         in_ptr += EC_METHOD_CHUNK_SIZE * columns;
     }
-
     return size * EC_METHOD_CHUNK_SIZE;
 }
 
