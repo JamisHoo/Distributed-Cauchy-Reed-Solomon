@@ -8,7 +8,7 @@
 #ifdef USE_AVX
 
 #include <immintrin.h>
-#define encode_t __m256
+#define encode_t __m256i
 
 #define XOR1(A) (A)
 #define XOR2(A,B) _mm256_xor_si256(A,B)
