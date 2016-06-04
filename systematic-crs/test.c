@@ -9,6 +9,7 @@
 #define MAX_DATA_SIZE (1024 * 1024 * 512)
 #define MAX_COLUMN (128)
 #define MAX_ROW (MAX_COLUMN + 128)
+#define NUM_THREADS (4)
 
 uint8_t* data;
 uint8_t* encoded[MAX_ROW];
@@ -27,7 +28,7 @@ void init() {
 
     for (i = 0; i < MAX_DATA_SIZE; ++i) data[i] = rand();
 
-    ec_method_initialize(4);
+    ec_method_initialize(NUM_THREADS);
 }
 
 void swap(uint32_t* a, uint32_t* b) { uint32_t c = *a; *a = *b; *b = c; }
@@ -159,6 +160,7 @@ int main() {
     printf("EC_GF_WORD_SIZE == %lu \n", EC_GF_WORD_SIZE);
     printf("EC_METHOD_WORD_SIZE == %d \n", EC_METHOD_WORD_SIZE);
     printf("EC_METHOD_WIDTH == %lu \n", EC_METHOD_WIDTH);
+    printf("Number of threads == %d \n", NUM_THREADS);
     int i;
     int seed = time(0);
     printf("random seed = %d \n", seed);
