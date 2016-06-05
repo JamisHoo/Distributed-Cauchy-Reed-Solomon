@@ -10,29 +10,19 @@
 #include <immintrin.h>
 #define encode_t __m256i
 
-#define XOR1(A) (A)
 #define XOR2(A,B) _mm256_xor_si256(A,B)
 #define XOR3(A,B,C) _mm256_xor_si256(_mm256_xor_si256(A,B),C)
-#define XOR4(A,B,C,D) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B),C),D)
-#define XOR5(A,B,C,D,E) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B),C),D),E)
-#define XOR6(A,B,C,D,E,F) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B),C),D),E),F)
-#define XOR7(A,B,C,D,E,F,G) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B),C),D),E),F),G)
-#define XOR8(A,B,C,D,E,F,G,H) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B),C),D),E),F),G),H)
-#define XOR9(A,B,C,D,E,F,G,H,I) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B),C),D),E),F),G),H),I)
+#define XOR4(A,B,C,D) _mm256_xor_si256(_mm256_xor_si256(A,B), _mm256_xor_si256(C,D))
+#define XOR5(A,B,C,D,E) _mm256_xor_si256(_mm256_xor_si256(_mm256_xor_si256(A,B), _mm256_xor_si256(C,D)),E)
 
 #else
 
 #define encode_t uint64_t
 
-#define XOR1(A) (A)
 #define XOR2(A,B) (A ^ B)
 #define XOR3(A,B,C) (A ^ B ^ C)
 #define XOR4(A,B,C,D) (A ^ B ^ C ^ D)
 #define XOR5(A,B,C,D,E) (A ^ B ^ C ^ D ^ E)
-#define XOR6(A,B,C,D,E,F) (A ^ B ^ C ^ D ^ E ^ F)
-#define XOR7(A,B,C,D,E,F,G) (A ^ B ^ C ^ D ^ E ^ F ^ G)
-#define XOR8(A,B,C,D,E,F,G,H) (A ^ B ^ C ^ D ^ E ^ F ^ G ^ H)
-#define XOR9(A,B,C,D,E,F,G,H,I) (A ^ B ^ C ^ D ^ E ^ F ^ G ^ H ^ I)
 
 #endif
 
