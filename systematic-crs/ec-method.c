@@ -1,6 +1,9 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sched.h>
 
 #include "ec-method.h"
 #include "thpool.h"
@@ -222,6 +225,11 @@ size_t ec_method_batch_encode(size_t size, uint32_t columns, uint32_t total_rows
     ec_encode_batch_param_t* params = malloc(sizeof(ec_encode_batch_param_t) * processor_count);
     size /= EC_METHOD_CHUNK_SIZE * columns;
 
+    pthread_t *threads = malloc(sizeof(pthread_t)*processor_count);
+    pthread_attr_t attr;
+    cpu_set_t cpus;
+    pthread_attr_init(&attr);
+
 #if AUTO_THPOOL
     if (original_size < THR_THPOOL) {
         params[0] = (ec_encode_batch_param_t) {
@@ -248,13 +256,20 @@ size_t ec_method_batch_encode(size_t size, uint32_t columns, uint32_t total_rows
             };
             in += params[i].size;
             out_offset += params[i].size / columns;
-            thpool_add_work(thpool, ec_method_batch_single_encode, (void*)(params + i));
+
+            CPU_ZERO(&cpus);
+            CPU_SET(i, &cpus);
+            pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+            pthread_create(threads + i, &attr, ec_method_batch_single_encode, (void*)(params + i));
         }
-        thpool_wait(thpool);
+
+        for(i = 0; i < processor_count; ++i) 
+            pthread_join(threads[i], NULL);
 #if AUTO_THPOOL
     }
 #endif
 
+    free(threads);
     free(params);
     return size * EC_METHOD_CHUNK_SIZE;
 }
