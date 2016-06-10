@@ -34,6 +34,6 @@
 #include <inttypes.h>
 #include <stddef.h>
 
-extern void (* ec_gf_muladd[])(uint8_t* out, uint8_t* in, size_t width);
+extern void (* ec_gf_muladd[])(uint8_t* out, uint8_t* in);
 
 #endif /* __EC_GF8_H__ */

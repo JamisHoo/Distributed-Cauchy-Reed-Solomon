@@ -102,7 +102,7 @@ size_t ec_method_encode_impl(size_t size, uint32_t columns, uint32_t row,
         // for each message column
         for (col = 0; col < columns; ++col) {
             ExpFE = (EC_GF_SIZE - 1 - GfLog[(row - columns) ^ col ^ bit[EC_GF_BITS - 1]]) % (EC_GF_SIZE - 1);
-            ec_gf_muladd[GfPow[ExpFE]](out, in, EC_METHOD_WIDTH);
+            ec_gf_muladd[GfPow[ExpFE]](out, in);
             in += EC_METHOD_CHUNK_SIZE;
         }
         out += EC_METHOD_CHUNK_SIZE;
@@ -135,7 +135,7 @@ size_t ec_method_batch_encode_impl(size_t size, uint32_t columns,
                 // for each message column
                 for (col = 0; col < columns; ++col) {
                     ExpFE = (EC_GF_SIZE - 1 - GfLog[(rows[r] - columns) ^ col ^ bit[EC_GF_BITS - 1]]) % (EC_GF_SIZE - 1);
-                    ec_gf_muladd[GfPow[ExpFE]](out_ptrs[r], in_ptr, EC_METHOD_WIDTH);
+                    ec_gf_muladd[GfPow[ExpFE]](out_ptrs[r], in_ptr);
                     in_ptr += EC_METHOD_CHUNK_SIZE;
                 }
                 in_ptr -= EC_METHOD_CHUNK_SIZE * columns;
@@ -297,7 +297,7 @@ size_t ec_method_decode_impl(size_t size, uint32_t columns, uint32_t* rows, uint
 
                     j = EC_METHOD_WIDTH * row_ind * EC_GF_BITS;
                     k = EC_METHOD_WORD_SIZE * col_ind * EC_GF_BITS;
-                    ec_gf_muladd[GfPow[ExpFE]]((uint8_t*)(M + j), out_ptr + k, EC_METHOD_WIDTH);
+                    ec_gf_muladd[GfPow[ExpFE]]((uint8_t*)(M + j), out_ptr + k);
                 }
 
         // Fill in the recovered information in the message from the inverted
@@ -313,7 +313,7 @@ size_t ec_method_decode_impl(size_t size, uint32_t columns, uint32_t* rows, uint
 
                 j = col_index[row_ind] * EC_GF_BITS * EC_METHOD_WORD_SIZE;
                 l = col_ind * EC_GF_BITS * EC_METHOD_WIDTH;
-                ec_gf_muladd[GfPow[ExpFE]](out_ptr + j, (uint8_t*)(M + l), EC_METHOD_WIDTH);
+                ec_gf_muladd[GfPow[ExpFE]](out_ptr + j, (uint8_t*)(M + l));
             }
         
         out_ptr += EC_METHOD_CHUNK_SIZE * columns;
