@@ -54,43 +54,38 @@ void measure(size_t column, size_t row, size_t data_size,
     for (i = 1; i < row; ++i)
         encoded[i] = encoded[i - 1] + data_size / column;
 
-    for (i = 0; i < column; ++i) 
+    for (i = 0; i < row; ++i) 
         rows[i] = i;
-    for (i = 0; i < 1000; ++i) 
-        swap(&rows[rand() % column], &rows[rand() % column]);
-    for (i = message_remaining; i < column; ++i)
-        rows[i + row - column] = rows[i];
-
-    for (i = column; i < row; ++i) 
-        rows[message_remaining + i - column] = i;
-    for (i = 0; i < 1000; ++i) 
-        swap(&rows[message_remaining + rand() % (row - column)], 
-             &rows[message_remaining + rand() % (row - column)]);
-
-    for (i = 0; i < row; ++i) {
-        if (i == redundant_remaining) printf("| ");
-        if (i == num_remaining) printf("|| ");
-        printf("%d ", rows[i]); 
-    }
+    for (i = 0; i < column - message_remaining; ++i)
+        printf("%d ", rows[i]);
+    printf("( ");
+    for (i = column - message_remaining; i < column; ++i)
+        printf("%d ", rows[i]);
+    printf("| ");
+    for (i = column; i < column + redundant_remaining; ++i)
+        printf("%d ", rows[i]);
+    printf(") ");
+    for (i = column + redundant_remaining; i < row; ++i)
+        printf("%d ", rows[i]);
     printf("\n");
 
     memset(encoded[0], 0x00, data_size / column * row);
 
     time1 = timer_start();
+    /*
     for (i = 0; i < row; ++i) {
         size = ec_method_encode(data_size, column, rows[i], data, encoded[i]);
         assert(size == data_size / column);
     }
-    /*
+    */
     size = ec_method_batch_encode(data_size, column, row, rows, data, encoded);
     assert(size == data_size / column);
-    */
     timer_end(time1,  "encode time: %.3f \n");
 
     memset(decoded, 0x00, data_size);
     time1 = timer_start();
-    size = ec_method_decode(data_size / column, column, rows,
-                            encoded, decoded);
+    size = ec_method_decode(data_size / column, column, rows + column - message_remaining,
+                            encoded + column - message_remaining, decoded);
     timer_end(time1, "decode time: %.3f \n");
     assert(size == data_size);
     assert(!memcmp(decoded, data, data_size));
