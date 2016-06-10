@@ -17,10 +17,11 @@ void print_header() {
     const char* header = 
         "#include <string.h>\n"
         "#include \"ec-gf.h\"\n"
+        "#include \"ec-method.h\"\n"
         "\n"
-        "static void gf8_muladd_00(uint8_t* out, uint8_t* in, size_t width) {\n"
+        "static void gf8_muladd_00(uint8_t* out, uint8_t* in) {\n"
         "    // this function should never be called\n"
-        "    memset(out, 0x00, width * 8 * EC_GF_WORD_SIZE);\n"
+        "    memset(out, 0x00, EC_METHOD_WIDTH * 8 * EC_GF_WORD_SIZE);\n"
         "}\n"
         "\n"
         ;
@@ -29,7 +30,7 @@ void print_header() {
 
 void print_tailer() {
     const char* tailer = 
-       "void (* ec_gf_muladd[])(uint8_t * out, uint8_t * in, size_t width) = {\n"
+       "void (* ec_gf_muladd[])(uint8_t * out, uint8_t * in) = {\n"
     ;
     printf("%s", tailer);
 
@@ -156,19 +157,19 @@ void tmp_variables(uint32_t* matrix, std::vector< std::vector<int> >& from, std:
 
 void gen(int i) {
     const char* header = 
-        "static void gf8_muladd_%02X(uint8_t* out, uint8_t* in, size_t width) {\n"
+        "static void gf8_muladd_%02X(uint8_t* out, uint8_t* in) {\n"
         "    size_t i;\n"
         "    encode_t* in_ptr = (encode_t*)in;\n"
         "    encode_t* out_ptr = (encode_t*)out;\n"
-        "    for (i = 0; i < width; ++i) {\n"
-        "        encode_t in0 = in_ptr[width * 0];\n"
-        "        encode_t in1 = in_ptr[width * 1];\n"
-        "        encode_t in2 = in_ptr[width * 2];\n"
-        "        encode_t in3 = in_ptr[width * 3];\n"
-        "        encode_t in4 = in_ptr[width * 4];\n"
-        "        encode_t in5 = in_ptr[width * 5];\n"
-        "        encode_t in6 = in_ptr[width * 6];\n"
-        "        encode_t in7 = in_ptr[width * 7];\n"
+        "    for (i = 0; i < EC_METHOD_WIDTH; ++i) {\n"
+        "        encode_t in0 = in_ptr[EC_METHOD_WIDTH * 0];\n"
+        "        encode_t in1 = in_ptr[EC_METHOD_WIDTH * 1];\n"
+        "        encode_t in2 = in_ptr[EC_METHOD_WIDTH * 2];\n"
+        "        encode_t in3 = in_ptr[EC_METHOD_WIDTH * 3];\n"
+        "        encode_t in4 = in_ptr[EC_METHOD_WIDTH * 4];\n"
+        "        encode_t in5 = in_ptr[EC_METHOD_WIDTH * 5];\n"
+        "        encode_t in6 = in_ptr[EC_METHOD_WIDTH * 6];\n"
+        "        encode_t in7 = in_ptr[EC_METHOD_WIDTH * 7];\n"
         ;
     const char* tailer =
         "        in_ptr++;\n"
@@ -196,7 +197,7 @@ void gen(int i) {
         printf(");\n");
     }
     for (int i = 8; i < 16; ++i) {
-        printf("        out_ptr[width * %d] = XOR%lu(out_ptr[width * %d]", i - 8, from[i].size() + 1, i - 8);
+        printf("        out_ptr[EC_METHOD_WIDTH * %d] = XOR%lu(out_ptr[EC_METHOD_WIDTH * %d]", i - 8, from[i].size() + 1, i - 8);
         for (auto j: from[i]) {
             if (j < 8) printf(", in%d", j);
             else printf(", tmp%d", j - 16);
@@ -207,7 +208,7 @@ void gen(int i) {
     /*
     for (int row = 0; row < EC_GF_BITS; ++row) {
         int pop_count = __builtin_popcount(GfPow[i + row]);
-        printf("        out_ptr[width * %d] = XOR%d(out_ptr[width * %d]", row, pop_count + 1, row);
+        printf("        out_ptr[EC_METHOD_WIDTH * %d] = XOR%d(out_ptr[EC_METHOD_WIDTH * %d]", row, pop_count + 1, row);
         for (int col = 0; col < EC_GF_BITS; ++col) {
             if (GfPow[i + row] & bit[col]) {
                 printf(", ");
